@@ -1,0 +1,171 @@
+{
+    "input": [
+        {
+            "id": 1,
+            "easy_question": "Provide a query showing Customers (just their lastname, firstname, customer ID and country) who are not in the US",
+            "question": "Show me the customers lastname, firstname, id and country for those who are not in the US.",
+            "sql": "select customerid, firstname, lastname, country from customer where not country = 'USA';"
+        },
+        {
+            "id": 2,
+            "easy_question": "Provide a query only showing the Customers from Brazil",
+            "question": "I want to see the customers which are from Brazil",
+            "sql": "select * from customer where country = 'Brazil';"
+        },
+        {
+            "id": 3,
+            "easy_question": "Provide a query showing the Invoices of customers who are from Brazil. The resultant table should show the customer's full name, Invoice ID, Date of the invoice and billing country",
+            "question": "Show me the invoices of customers who are from Brazil. The resultant table should show the customer's full name, invoice id, date of the invoice and the billing country.",
+            "sql": "select c.firstname, c.lastname, i.invoiceid, i.invoicedate, i.billingcountry from customer as c, invoice as i where c.country = 'Brazil' and c.customerid = i.customerid;"
+        },
+        {
+            "id": 4,
+            "easy_question": "Provide a query showing only the Employees who are Sales Agents",
+            "question": "Get me the sales employees",
+            "sql": "select * from employee where employee.title = 'Sales Support Agent';"
+        },
+        {
+            "id": 5,
+            "easy_question": "Provide a query showing a unique list of billing countries from the Invoice table",
+            "question": "I want a list of billing countries they should be unique",
+            "sql": "select distinct billingcountry from invoice;"
+        },
+        {
+            "id": 6,
+            "easy_question": "Provide a query showing the invoices of customers who are from Brazil",
+            "question": "What are the invoices of brazilians customers ?",
+            "sql": "select * from customer as c, invoice as i where c.country = 'Brazil' and c.customerid = i.customerid;"
+        },
+        {
+            "id": 7,
+            "easy_question": "Provide a query that shows the invoices associated with each sales agent. The resultant table should include the Sales Agent's full name",
+            "question": "I want the invoices associated with each sales agent. Include their name",
+            "sql": "select e.firstname, e.lastname, i.invoiceid, i.customerid, i.invoicedate, i.billingaddress, i.billingcountry, i.billingpostalcode, i.total from customer as c, invoice as i on c.customerid = i.customerid join employee as e on e.employeeid = c.supportrepid order by e.employeeid;"
+        },
+        {
+            "id": 8,
+            "easy_question": "Provide a query that shows the Invoice Total, Customer name, Country and Sale Agent name for all invoices and customers",
+            "question": "",
+            "sql": "select e.firstname as 'employee first', e.lastname as 'employee last', c.firstname as 'customer first', c.lastname as 'customer last', c.country, i.total from employee as e join customer as c on e.employeeid = c.supportrepid join invoice as i on c.customerid = i.customerid"
+        },
+        {
+            "id": 10,
+            "easy_question": "Looking at the InvoiceLine table, provide a query that COUNTs the number of line items for Invoice ID 37",
+            "question": "How many invoice line is there for invoice with id 37 ?",
+            "sql": "select count(i.invoicelineid) from invoiceline as i where i.invoiceid = 37"
+        },
+        {
+            "id": 11,
+            "easy_question": "Looking at the InvoiceLine table, provide a query that COUNTs the number of line items for each Invoice. HINT: [GROUP BY]",
+            "question": "I want to know how many line items there is for each invoice",
+            "sql": "select invoiceid, count(invoicelineid) from invoiceline group by invoiceid"
+        },
+        {
+            "id": 12,
+            "easy_question": "Provide a query that includes the track name with each invoice line item",
+            "question": "I want to match the track name for each invoice line item",
+            "sql": "select i.*, t.name from invoiceline as i, track as t on i.trackid = t.trackid"
+        },
+        {
+            "id": 13,
+            "easy_question": "Provide a query that includes the purchased track name AND artist name with each invoice line item",
+            "question": "I want to see for each invoice line item the coresponding track and artist name",
+            "sql": "select i.*, t.name as 'track', ar.name as 'artist' from invoiceline as i join track as t on i.trackid = t.trackid join album as al on al.albumid = t.albumid join artist as ar on ar.artistid = al.artistid"
+        },
+        {
+            "id": 14,
+            "easy_question": "Provide a query that shows the # of invoices per country. HINT: [GROUP BY]",
+            "question": "How many invoices per country do we have ?",
+            "sql": "select billingcountry, count(billingcountry) as '# of invoices' from invoice group by billingcountry"
+        },
+        {
+            "id": 15,
+            "easy_question": "Provide a query that shows the total number of tracks in each playlist. The Playlist name should be include on the resultant table.",
+            "question": "How many tracks is there in each playlist. Include the playlist name",
+            "sql": "select *, count(trackid) as '# of tracks' from playlisttrack, playlist on playlisttrack.playlistid = playlist.playlistid group by playlist.playlistid"
+        },
+        {
+            "id": 16,
+            "easy_question": "Provide a query that shows all the Tracks, but displays no IDs. The resultant table should include the Album name, Media type and Genre.",
+            "question": "Show me all the tracks with their album name, media type and genre. Don't include their id",
+            "sql": "select t.name as 'track', t.composer, t.milliseconds, t.bytes, t.unitprice, a.title as 'album', g.name as 'genre', m.name as 'media type' from track as t join album as a on a.albumid = t.albumid join genre as g on g.genreid = t.genreid join mediatype as m on m.mediatypeid = t.mediatypeid"
+        },
+        {
+            "id": 17,
+            "easy_question": "Provide a query that shows all Invoices but includes the # of invoice line items",
+            "question": "I want a list of the invoices with their number of line items included",
+            "sql": "select invoice.*, count(invoiceline.invoicelineid) as '# of line items' from invoice, invoiceline on invoice.invoiceid = invoiceline.invoiceid group by invoice.invoiceid"
+        },
+        {
+            "id": 18,
+            "easy_question": "Provide a query that shows total sales made by each sales agent",
+            "question": "How much sales have each of my sales employee done ?",
+            "sql": "select e.*, count(i.invoiceid) as 'Total Number of Sales' from employee as e join customer as c on e.employeeid = c.supportrepid join invoice as i on i.customerid = c.customerid group by e.employeeid"
+        },
+        {
+            "id": 19,
+            "easy_question": "Which sales agent made the most in sales in 2009?",
+            "question": "Who made the most sales in 2009?",
+            "sql": "select *, max(total) from (select e.*, sum(total) as 'Total' from employee as e join customer as c on e.employeeid = c.supportrepid join invoice as i on i.customerid = c.customerid where i.invoicedate between '2009-01-00' and '2009-12-31' group by e.employeeid)",
+            "_comment": "Maybe for this one redo the easy question ?"
+        },
+        {
+            "id": 20,
+            "easy_question": "Which sales agent made the most in sales in 2010?",
+            "question": "Who made the most sales in 2010?",
+            "sql": "select *, max(total) from (select e.*, sum(total) as 'Total' from employee as e join customer as c on e.employeeid = c.supportrepid join invoice as i on i.customerid = c.customerid where i.invoicedate between '2010-01-00' and '2010-12-31' group by e.employeeid)",
+            "_comment": "Kind of a dublicate of 19"
+        },
+        {
+            "id": 21,
+            "easy_question": "Which sales agent made the most in sales over all?",
+            "question": "Who made the most in sales?",
+            "sql": ""
+        },
+        {
+            "id": 22,
+            "easy_question": "Provide a query that shows the # of customers assigned to each sales agent",
+            "question": "How many customers are assigned to my sales agent ?",
+            "sql": "select e.*, count(c.customerid) as 'TotalCustomers' from employee as e join customer as c on e.employeeid = c.supportrepid group by e.employeeid"
+        },
+        {
+            "id": 23,
+            "easy_question": "Provide a query that shows the total sales per country. Which country's customers spent the most?",
+            "question": "How much sales have me made by country ? Sort them with by order of total sales",
+            "sql": "select i.billingcountry, sum(total) as 'TotalSales' from invoice as i group by billingcountry order by totalsales desc"
+        },
+        {
+            "id": 24,
+            "easy_question": "Provide a query that shows the most purchased track of 2013",
+            "question": "What was the most purchased track of 2013?",
+            "sql": "select *, count(t.trackid) as count from invoiceline as il join invoice as i on i.invoiceid = il.invoiceid join track as t on t.trackid = il.trackid where i.invoicedate between '2013-01-01' and '2013-12-31' group by t.trackid order by count desc"
+        }
+    ],
+    "to_add": [
+        {
+            "id": 9,
+            "easy_question": "How many Invoices were there between 2009 and 2011? What are the respective total sales for each of those years?",
+            "question": "How many invoices have we made between 2009 and 2011 and what are the total for each of those years",
+            "sql": "select count(i.invoiceid), sum(i.total) from invoice as i where i.invoicedate between datetime('2011-01-01 00:00:00') and datetime('2011-12-31 00:00:00'); select count(i.invoiceid), sum(i.total) from invoice as i where i.invoicedate between datetime('2009-01-01 00:00:00') and datetime('2009-12-31 00:00:00');",
+            "_comment": "There are 2 queries in this one"
+        },
+        {
+            "id": 25,
+            "easy_question": "Provide a query that shows the top 5 most purchased tracks over all",
+            "question": "",
+            "sql": ""
+        },
+        {
+            "id": 26,
+            "easy_question": "Provide a query that shows the top 3 best selling artists",
+            "question": "",
+            "sql": ""
+        },
+        {
+            "id": 27,
+            "easy_question": "Provide a query that shows the most purchased Media Type",
+            "question": "",
+            "sql": ""
+        }
+    ]
+}

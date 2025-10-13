@@ -1,0 +1,9 @@
+{
+    "input": [
+        {
+            "id": 1,
+            "question": "Calculate monthly-wise invoice sales and sort them in descending order",
+            "sql": "SELECT DATE_FORMAT(InvoiceDate, '%Y-%m') AS Month, SUM(Total) AS TotalSales FROM invoice GROUP BY DATE_FORMAT(InvoiceDate, '%Y-%m') ORDER BY TotalSales DESC;"
+        }
+    ]
+}
