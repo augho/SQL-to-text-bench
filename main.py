@@ -1,6 +1,8 @@
 import datetime
 
 from src.BenchInput import BenchInput
+from src.BenchOutput import BenchOutput
+from src.Processer import Processer
 from src.SqliteConnector import SqliteConnector
 from common.utils import check_equality, write_json, json_to_str, human_in_the_loop, read_json
 from src.AiInsightApi import AiInsightApi
@@ -103,6 +105,28 @@ def run_bench(
         print(json_to_str(output))
 
 
+def run_analysis(filepath: str, db_conn_str: str, do_stats: bool = False, do_err_chart: bool = False, do_gen_chart: bool = False):
+    assert filepath.find('.') == filepath.rfind('.'), "Report path must have only one '.'"
+
+    report = read_json(filepath)
+
+    bench_outputs: list[BenchOutput] = [BenchOutput.from_dict(o) for o in report["output"]]
+
+    processer = Processer(db_conn_str, bench_outputs)
+
+    # Changes like so: out/foo.json -> out/foo.stats.json
+    stats_filepath = ".stats.".join(filepath.split('.'))
+
+    if do_stats:
+        stats = processer.construct_stats()
+        write_json(stats_filepath, stats)
+
+    if do_gen_chart:
+        Processer.generate_success_graph(stats_filepath)
+    if do_err_chart:
+        Processer.generate_error_graph(stats_filepath)
+
+    print("[LOG] Analysis performed successfully")
 if __name__ == "__main__":
     config = read_json("./appsettings.json")
     
@@ -110,6 +134,7 @@ if __name__ == "__main__":
     DB_CONN_STR = config["input"]["dbFilepath"]
     API_HOSTNAME = config["input"]["apiHostname"]
     API_PORT = config["input"]["apiPort"]
+    CUSTOM_REPORT_PATH = config["input"]["customReportPath"]
 
     # folder + filename prefix + .json
     OUTPUT_FILEPATH = config["output"]["folder"] 
@@ -126,12 +151,27 @@ if __name__ == "__main__":
         test_db(DB_CONN_STR, do_logging=DO_LOGGING)
         test_api(API_HOSTNAME, API_PORT, do_logging=DO_LOGGING)
     
-    run_bench(
-        api_hostname=API_HOSTNAME,
-        api_port=API_PORT,
-        input_path=INPUT_FILEPATH,
-        output_path=OUTPUT_FILEPATH,
-        use_easy_question=USE_EASY_QUESTION,
-        do_logging=DO_LOGGING
+    DO_BENCH = human_in_the_loop(
+        f"Do you wish to run the benchmark on {API_HOSTNAME} (y/N) ?",
+        do_default=(True, 'n')
     )
+    if DO_BENCH:
+        run_bench(
+            api_hostname=API_HOSTNAME,
+            api_port=API_PORT,
+            input_path=INPUT_FILEPATH,
+            output_path=OUTPUT_FILEPATH,
+            use_easy_question=USE_EASY_QUESTION,
+            do_logging=DO_LOGGING
+        )
+    else :
+        DO_ANALYSIS = human_in_the_loop(
+            f"Do you whish to run an analysis on the following benchmark results{CUSTOM_REPORT_PATH} (Y/n) ?",
+            do_default=(True, 'y')
+        )
+        if DO_ANALYSIS:
+            report_path = "out/report_20251013_111554.json"
+            db_conn_str = "./db/Chinook.db"
+            run_analysis(report_path, db_conn_str)
+
     # TODO run a comparison between the BenchOutput and the dataset
