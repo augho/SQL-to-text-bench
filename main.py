@@ -4,7 +4,7 @@ from src.BenchInput import BenchInput
 from src.BenchOutput import BenchOutput
 from src.Processer import Processer
 from src.SqliteConnector import SqliteConnector
-from common.utils import check_equality, write_json, json_to_str, human_in_the_loop, read_json
+from src.common.utils import check_equality, write_json, json_to_str, human_in_the_loop, read_json
 from src.AiInsightApi import AiInsightApi
 
 

@@ -5,7 +5,7 @@ import json
 
 from src.BenchInput import BenchInput, ListId
 from src.BenchOutput import BenchOutput
-from common.utils import human_in_the_loop
+from src.common.utils import human_in_the_loop
 
 
 class AiInsightApi:

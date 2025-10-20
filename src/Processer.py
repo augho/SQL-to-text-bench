@@ -3,7 +3,7 @@ import re
 from src.BenchOutput import BenchOutput
 from src.BenchInput import BenchInput
 from src.SqliteConnector import SqliteConnector
-from utils.utils import remove_limit_clause, check_equality, read_json, create_graph
+from src.common.utils import remove_limit_clause, check_equality, read_json, create_graph
 
 
 class Processer:
@@ -43,6 +43,9 @@ class Processer:
 
             exact_result_set = self.db.execute_query(o.matching_input.sql)
             llm_result_set = self.db.execute_query(generated_sql)
+
+            assert isinstance(exact_result_set, list), f"type={type(exact_result_set)}"
+            assert isinstance(llm_result_set, list), f"type={type(llm_result_set)}"
 
             # Handling sql errors
             if exact_result_set is None:
