@@ -101,11 +101,10 @@ class Processer:
         }
     
     @staticmethod
-    def generate_error_graph(stats_filepath: str):
+    def generate_error_graph(stats_filepath: str, chart_output_path: str):
         # Bar chart with errors
         # x: errors codes like [ERR1, ERR2] and so on
         # y: count for each category
-        assert stats_filepath.endswith(".stats.json")
         stats = read_json(stats_filepath)
         
         errors_justifications: list[str] = stats["error_state"]["error_justifications"]
@@ -127,7 +126,7 @@ class Processer:
             err_chart_val.append(v)
 
         create_graph(
-            output_path=stats_filepath.removesuffix(".stats.json") + ".err_graph.png",
+            output_path=chart_output_path,
             categories=err_chart_cat,
             values=err_chart_val,
             xlabel="Error types",
@@ -137,11 +136,10 @@ class Processer:
 
     
     @staticmethod
-    def generate_success_graph(stats_filepath: str):
+    def generate_success_graph(stats_filepath: str, chart_output_path: str):
         # Bar chart with the results
         # x: [exact_match, no_match:row_eq, no_match: field_eq, no_match:other, sql_error, error]
         # y: count for each category
-        assert stats_filepath.endswith(".stats.json")
         stats = read_json(stats_filepath)
         stats = stats["success_rate"]
 
@@ -196,7 +194,7 @@ class Processer:
         chart_val.append(total_count - (exact_match_count + no_match_count + sql_error_count))
         
         create_graph(
-            output_path=stats_filepath.removesuffix(".stats.json") + ".success_graph.png",
+            output_path=chart_output_path,
             categories=chart_cat,
             values=chart_val,
             xlabel="Query Results Type",

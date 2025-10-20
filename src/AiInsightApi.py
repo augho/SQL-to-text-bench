@@ -37,15 +37,14 @@ class AiInsightApi:
         url = f"http://{self.hostname}:{self.port}/api/v1/agent/ask"
         payload = {
             "prompt": bench_input.easy_question if easy_mode else bench_input.question,
-            "conversationId": -1
+            "conversationId": None
         }
         headers = {"content-type": "application/json"}
 
         response = requests.post(url, json=payload, headers=headers)
-        data = json.loads(response.content)
-
 
         if response.ok:
+            data = json.loads(response.content)
             if not data["requiresApproval"]:
                 return BenchOutput(
                     bench_input,
@@ -117,16 +116,13 @@ class AiInsightApi:
 
 
 """
-send_question() api response format
+/agent/ask api response format
 {
-  "messageId": 3,
-  "conversationId": 1,
-  "senderType": 1,
-  "messageText": "SELECT COUNT(EmployeeId) FROM Employee;",
-  "sentAt": "2025-10-09T15:58:51.5562671Z",
+  "messageId": 0,
+  "senderType": "agent",
+  "messageText": "SELECT COUNT(EmployeeId) FROM Employee",
+  "sentAt": "2025-10-20T10:13:54.9457861Z",
   "requiresApproval": true,
-  "linkedMessageId": 2,
-  "approvalStatus": 0,
-  "approvedAt": null
+  "approvalStatus": "pending"
 }
 """
