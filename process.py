@@ -1,6 +1,6 @@
 from src.BenchOutput import BenchOutput
 from src.Processer import Processer
-from src.utils import read_json, write_json
+from common.utils import read_json, write_json
 
 def run_analysis(filepath: str, db_conn_str: str, do_stats: bool = False, do_err_chart: bool = False, do_gen_chart: bool = False):
     assert filepath.find('.') == filepath.rfind('.'), "Report path must have only one '.'"

@@ -3,7 +3,7 @@ import re
 from src.BenchOutput import BenchOutput
 from src.BenchInput import BenchInput
 from src.SqliteConnector import SqliteConnector
-from src.utils import remove_limit_clause, check_equality, read_json, create_graph
+from utils.utils import remove_limit_clause, check_equality, read_json, create_graph
 
 
 class Processer:

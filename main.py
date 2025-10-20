@@ -1,9 +1,8 @@
 import datetime
 
-from src.utils import read_json
 from src.BenchInput import BenchInput
 from src.SqliteConnector import SqliteConnector
-from src.utils import check_equality, write_json, json_stringify, human_in_the_loop
+from common.utils import check_equality, write_json, json_to_str, human_in_the_loop, read_json
 from src.AiInsightApi import AiInsightApi
 
 
@@ -16,9 +15,9 @@ def construct_input(input_path: str) -> list[BenchInput]:
 
 
 def test_db(db_filepath, do_logging: bool = True):
-    db = SqliteConnector(db_filepath)
+    db = SqliteConnector(db_filepath, do_logging=do_logging)
+    assert db.test(), "Connection test failed"
 
-    assert db.test(do_logging), "Connection test failed"
     if do_logging:
         print("[LOG] CONN TEST SUCCESS")
         
@@ -34,6 +33,8 @@ def test_db(db_filepath, do_logging: bool = True):
 
     assert query_res_1 is not None
     assert query_res_2 is not None
+
+    assert isinstance(query_res_1, list) and isinstance(query_res_2, list)
     
     assert check_equality(query_res_1, query_res_2)
     if do_logging:
@@ -99,7 +100,7 @@ def run_bench(
 
     if not success:
         print("Here is the ouput though:")
-        print(json_stringify(output))
+        print(json_to_str(output))
 
 
 if __name__ == "__main__":

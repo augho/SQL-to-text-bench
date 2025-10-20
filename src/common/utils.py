@@ -1,8 +1,10 @@
 import json
 import re
 import matplotlib.pyplot as plt
-
-
+import os
+import threading
+import time
+from typing import Callable
 
 def read_json(filepath: str) -> dict:
     try:
@@ -36,14 +38,25 @@ def check_equality(table1: list, table2: list) -> bool:
     
     return True
 
-def json_stringify(json_obj: dict | list) -> str:
+def json_to_str(json_obj: dict | list) -> str:
     return json.dumps(json_obj)
 
+def str_to_json(s: str) -> dict | None:
+    try:
+       res = json.loads(s)
+       return res
+    except json.decoder.JSONDecodeError:
+        return None
 
-def human_in_the_loop(msg: str, confirm_input: str = 'y', cancel_input: str = 'n') -> bool:
+def human_in_the_loop(msg: str, confirm_input: str = 'y', cancel_input: str = 'n', do_default: tuple[bool, str] = (False, '')) -> bool:
+    assert do_default[0] is  False or do_default[1] == confirm_input or do_default[1] == cancel_input, f"yes:{confirm_input}, no:{cancel_input}, default:{do_default}"
+
     user_input = cancel_input
     while user_input.lower() != confirm_input:
         user_input = input(f"{msg}")
+        if do_default[0] and user_input == '':
+            return True if do_default[1] == confirm_input else False
+            
         if user_input == cancel_input:
             return False
     return True
@@ -94,6 +107,31 @@ def create_graph(output_path: str, categories: list[str], values: list[int], xla
         plt.grid(axis='y', linestyle='--', alpha=0.7) # Add horizontal grid lines
         plt.tight_layout()
         plt.savefig(output_path)
+
+def create_dir_if_not_exists(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
+def read_dir_files(path: str) -> list[str]:
+    return os.listdir(path)
+
+
+def run_rate_limited_tasks(cb: Callable, cb_args: list[tuple], max_rpm: int, do_logging: bool):
+        
+        threads: list[threading.Thread] = []
+
+        for args in cb_args:
+            threads.append(threading.Thread(target=cb, args=args))        
+
+        # To not hit the LLM Api rate limit we add a delay between requests (the +1 is just to make sure)
+        thread_delay_seconds: float = (60 + 1) / max_rpm
+
+        for i, t in enumerate(threads):
+            if do_logging:
+                print(f"Starting task {i + 1}/{len(threads)}")
+            t.start()
+            time.sleep(thread_delay_seconds)
+
+        [t.join() for t in threads]
 if __name__ == "__main__":
     # --- TEST ---
 
