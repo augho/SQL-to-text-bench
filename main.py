@@ -31,14 +31,14 @@ def test_db(db_filepath, do_logging: bool = True):
         print("[LOG] TABLE CHECK SUCCESS")
 
     db.do_logging = False
-    assert db.execute_query("this is not sql") is None
+    assert db.select("this is not sql") is None
     db.do_logging = do_logging
 
     # print(db.tables_names())
-    query_res_1 = db.execute_query(
+    query_res_1 = db.select(
         "SELECT AlbumId, ArtistId, Title FROM Album LIMIT 3;"
     )
-    query_res_2 = db.execute_query(
+    query_res_2 = db.select(
         "SELECT Title, AlbumId, ArtistId FROM Album LIMIT 5;"
     )
 
