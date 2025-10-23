@@ -1,5 +1,6 @@
 import string
 
+
 def char_classes_of(s: str):
     res = {
         "has_upper": False,
@@ -10,14 +11,14 @@ def char_classes_of(s: str):
     }
 
     for char in s:
-        if char.isupper(): 
+        if char.isupper():
             res["has_upper"] = True
-        if char.islower(): 
+        if char.islower():
             res["has_lower"] = True
         if char.isdigit():
             res["has_digit"] = True
-        if char.isspace(): 
-            res["has_space"] = True    
+        if char.isspace():
+            res["has_space"] = True
         if char in string.punctuation:
             res["has_punct"] = True
         # early exit if all found
@@ -33,6 +34,13 @@ def common_prefix(s1: str, s2: str):
         i += 1
     return s1[:i]
 
+
+def remove_json_markdown(dirty_string: str) -> str:
+    return dirty_string.strip().removeprefix("```json").removesuffix("```")
+    # .replace('\\n', '\n')
+    # .replace('\\"', '"')
+
+
 # def common_prefixes(sample_values, prefix_len=6, top_n=5):
 #     prefs = Counter()
 #     for v in sample_values:
@@ -42,3 +50,21 @@ def common_prefix(s1: str, s2: str):
 #         if len(s) >= 1:
 #             prefs[s[:prefix_len]] += 1
 #     return prefs.most_common(top_n)
+
+
+table_desc_creation_str = """
+CREATE TABLE IF NOT EXISTS table_description (
+    id INT PRIMARY KEY,
+    name TEXT,
+    description TEXT
+)
+"""
+
+field_desc_creation_str = """
+CREATE TABLE IF NOT EXISTS field_description (
+    id INT PRIMARY KEY,
+    table_id INT,
+    name TEXT,
+    description TEXT
+)
+"""

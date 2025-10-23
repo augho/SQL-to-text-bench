@@ -41,8 +41,8 @@ class Processer:
             
             generated_sql = remove_limit_clause(o.generated_sql or "")
 
-            exact_result_set = self.db.execute_query(o.matching_input.sql)
-            llm_result_set = self.db.execute_query(generated_sql)
+            exact_result_set = self.db.select(o.matching_input.sql)
+            llm_result_set = self.db.select(generated_sql)
 
             assert isinstance(exact_result_set, list), f"type={type(exact_result_set)}"
             assert isinstance(llm_result_set, list), f"type={type(llm_result_set)}"
