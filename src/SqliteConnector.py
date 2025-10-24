@@ -177,7 +177,7 @@ class SqliteConnector:
 
     def min_max_for_column(
         self, tablename, column_name
-    ) -> tuple[int, int] | tuple[None, None]:
+    ) -> tuple[int | None, int | None]:
         # We attempt MIN/MAX directly; for mixed types SQLite will try to compare.
         q = f"SELECT MIN({column_name}), MAX({column_name}) FROM {tablename} WHERE {column_name} IS NOT NULL"
 

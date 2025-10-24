@@ -1,15 +1,46 @@
+from __future__ import annotations
 from google import genai
 from dotenv import load_dotenv
-from src.common.utils import str_to_json
-from pydantic import BaseModel, Field
-from typing import Type
-from src.MetadataModel import TableMetadata
+from pydantic import BaseModel, Field, ValidationError
+from typing import Type, TypeVar, Generic
+from src.MetadataModel import TableMetadata, ColumnMetadata
 
 
-class ModelOutput(BaseModel):
+T = TypeVar("T")
+
+
+class FieldDescription(BaseModel):
+    """A structured description of an SQL table's field"""
+
+    name: str = Field(description="Name of the field")
+    description: str = Field(description="Description of the field")
+
+    @staticmethod
+    def from_metadata(field_metadata: ColumnMetadata) -> FieldDescription:
+        return FieldDescription(name=field_metadata.name, description="")
+
+class TableDescription(BaseModel):
+    """A structured description of an SQL table and its fields"""
+
+    columns: list[FieldDescription] = Field(
+        description="A list of the table's fields decription"
+    )
+    table: str = Field(description="SQL table description")
+
+    @staticmethod
+    def empty() -> TableDescription:
+        return TableDescription(columns=[], table="")
+
+    @staticmethod
+    def from_metadata(table_metadata: TableMetadata) -> TableDescription:
+        return TableDescription(table="", columns=[FieldDescription.from_metadata(f) for f in table_metadata.columns])
+class ModelOutput(BaseModel, Generic[T]):
     success: bool
     error: str | None
-    data: str
+    data: T
+
+
+TableDescriptionOutput = ModelOutput[TableDescription]
 
 
 class Gemini:
@@ -43,20 +74,30 @@ class Gemini:
 
     def summarize_table_metadata(
         self, table_metadata: TableMetadata | str
-    ) -> ModelOutput:
+    ) -> TableDescriptionOutput:
         prompt = table_summarization_prompt_init(table_metadata)
 
         response = self._generate_json(prompt, TableDescription)
 
         if response is None:
-            return ModelOutput(False, "Generation failed", None)
+            return TableDescriptionOutput(success=False, error="Generation failed", data=TableDescription.empty())
 
-        parse_result = str_to_json(response)
+        try:
+            parse_result = TableDescription.model_validate_json(response)
+        except ValidationError:
+            parse_result = None
+
+
+        # parse_result = str_to_json(response)
 
         if parse_result is None:
-            return ModelOutput(False, "Model didn't respond with valid json", response)
+            return TableDescriptionOutput(
+                success=False,
+                error=f"Model didn't respond with valid json: {response}",
+                data=TableDescription.empty(),
+            )
 
-        return ModelOutput(success=True, error=None, data=parse_result)
+        return TableDescriptionOutput(success=True, error=None, data=parse_result)
 
 
 def table_summarization_prompt_init(table_metadata: str | TableMetadata):
@@ -89,19 +130,3 @@ You MUST respect the given output format which should be ONLY valid json
     ],
     "table": "The **Employee_Sales** table functions as a **fact table** used for sales analysis. Its structure links a specific employee (via **EmployeeID**) to a quantitative performance metric (**Quarterly_Revenue**). Since EmployeeID is not unique across all rows, the table is designed to capture **time-series or periodic metrics** (like quarterly data) for each employee, making it ideal for tracking performance trends and aggregations."
 }}"""
-
-
-class FieldDescription(BaseModel):
-    """A structured description of an SQL table's field"""
-
-    name: str = Field(description="Name of the field")
-    descrition: str = Field(description="Description of the field")
-
-
-class TableDescription(BaseModel):
-    """A structured description of an SQL table and its fields"""
-
-    columns: list[FieldDescription] = Field(
-        description="A list of the table's fields decription"
-    )
-    table: str = Field(description="SQL table description")

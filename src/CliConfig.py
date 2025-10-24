@@ -9,6 +9,7 @@ class OutputFormat(Enum):
     CSV = "csv"
 
 
+# TODO transform this into a fully static class
 class CliConfig:
     _config: CliConfig | None
 
@@ -22,6 +23,7 @@ class CliConfig:
         self.do_llm_summary: bool = not args.no_llm
         self.dry_run: bool = args.dry_run
         self.save_metadata: bool = args.save_metadata
+        self.skip_human_in_the_loop: bool = args.yes
 
     def __str__(self) -> str:
         return f"""CliConfig(
@@ -33,7 +35,8 @@ class CliConfig:
             do_extraction={self.do_extraction},
             do_llm_summary={self.do_llm_summary},
             dry_run={self.dry_run},
-            save_metadata={self.save_metadata})"""
+            save_metadata={self.save_metadata})
+            skip_human_in_the_loop={self.skip_human_in_the_loop}"""
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -56,6 +59,7 @@ class CliConfig:
         do_llm_summary: bool,
         dry_run: bool,
         save_metadata: bool,
+        skip_human_in_the_loop: bool,
     ) -> None:
         args = argparse.Namespace(
             filename=filename,
@@ -67,6 +71,7 @@ class CliConfig:
             no_llm=not do_llm_summary,
             dry_run=dry_run,
             save_metadata=save_metadata,
+            skip_human_in_the_loop=skip_human_in_the_loop,
         )
         CliConfig._config = CliConfig(args)
 
@@ -83,7 +88,7 @@ class CliConfig:
         # ----------------------------------------------
         # Tweak execution
         parser.add_argument(
-            "-s", "--silent", action="store_true", help="Disable logging"
+            "-s", "--silent", action="store_true", default=False, help="Disable logging"
         )
 
         parser.add_argument(
@@ -94,6 +99,13 @@ class CliConfig:
             help="Maximum # of requests per minute sent to the LLM api (to disable rate limit set to -1)",
         )
 
+        parser.add_argument(
+            "-y",
+            "--yes",
+            action="store_true",
+            default=False,
+            help="Skip HIL interactions",
+        )
         # -----------------------------------------------
         # Tweak output
         parser.add_argument(
@@ -102,6 +114,7 @@ class CliConfig:
             type=str,
             default="",
             help="Folder where the output will be written",
+            required=True
         )
 
         parser.add_argument(
@@ -113,7 +126,8 @@ class CliConfig:
         )
         parser.add_argument(
             "--save-metadata",
-            action="store_false",
+            action="store_true",
+            default=False,
             help="Save the extracted metadata into the output folder",
         )
 
@@ -122,13 +136,17 @@ class CliConfig:
         parser.add_argument(
             "--no-extraction",
             action="store_true",
+            default=False,
             help="[DEV] Skip the sql part and reads metadata from json files",
         )
         parser.add_argument(
-            "--no-llm", action="store_true", help="[DEV] Skip the llm querying"
+            "--no-llm",
+            action="store_true",
+            default=False,
+            help="[DEV] Skip the llm querying",
         )
 
-        parser.add_argument("--dry-run", action="store_false")
+        parser.add_argument("--dry-run", action="store_true", default=False)
 
         args = parser.parse_args()
 

@@ -1,13 +1,19 @@
 from __future__ import annotations
-from typing import Optional, List
 from pydantic import BaseModel
 import json
 from src.common.utils import log
+from typing import Any
 
 
 class DatabaseMetadata(BaseModel):
     name: str
     tables: list[TableMetadata]
+
+    def find_table_by_name(self, tablename: str) -> TableMetadata | None:
+        for table in self.tables:
+            if table.name == tablename:
+                return table
+        return None
 
 
 class TableMetadata(BaseModel):
@@ -15,8 +21,14 @@ class TableMetadata(BaseModel):
     columns: list[ColumnMetadata]
     row_count: int
 
+    def find_column_by_name(self, name: str) -> ColumnMetadata | None:
+        for col in self.columns:
+            if col.name == name:
+                return col
+        return None
+
     @staticmethod
-    def from_file(filepath: str) -> Optional[TableMetadata]:
+    def from_file(filepath: str) -> TableMetadata | None:
         try:
             with open(filepath, "r") as json_file:
                 result = json.load(json_file)
@@ -35,19 +47,17 @@ class ColumnMetadata(BaseModel):
     null_count: int
     non_null_count: int
     distinct_count: int
-    min_value: Optional[int]
-    max_value: Optional[int]
+    min_value: int | None
+    max_value: int | None
     length: LengthMetaData
-    samples: List[int | str | None]
+    samples: list[Any]
 
 
 class LengthMetaData(BaseModel):
     min: int | None
-    average: int | None
+    average: float | None
     max: int | None
 
 
 if __name__ == "__main__":
-    l = LengthMetaData(1, 2, 3)
-
-    print(l.model_dump_json())
+    pass
