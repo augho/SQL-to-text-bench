@@ -1,5 +1,6 @@
 from __future__ import annotations
-from src.BenchInput import BenchInput
+
+from src.bench.BenchInput import BenchInput
 
 
 class BenchOutput:
@@ -14,7 +15,9 @@ class BenchOutput:
         return {
             "list_id": self.matching_input.get_list_id().value,
             "input_id": self.matching_input.id,
-            "question": self.matching_input.easy_question if with_easy_question else self.matching_input.question,
+            "question": self.matching_input.easy_question
+            if with_easy_question
+            else self.matching_input.question,
             "correct_sql": self.matching_input.sql,
             "generated_sql": self.generated_sql,
             "error": self.error,
@@ -22,12 +25,12 @@ class BenchOutput:
 
     @staticmethod
     def from_dict(bench_output: dict) -> BenchOutput:
-        bench_output.setdefault('question', "")
+        bench_output.setdefault("question", "")
         return BenchOutput(
             matching_input=BenchInput(
                 id=bench_output["input_id"],
                 easy_question=None,
-                question=bench_output['question'],
+                question=bench_output["question"],
                 sql=bench_output["correct_sql"],
             ),
             generated_sql=bench_output["generated_sql"],

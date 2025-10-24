@@ -1,8 +1,10 @@
 from __future__ import annotations
-from pydantic import BaseModel
 import json
-from src.common.utils import log
 from typing import Any
+
+from pydantic import BaseModel
+
+from src.lib.utils import log
 
 
 class DatabaseMetadata(BaseModel):

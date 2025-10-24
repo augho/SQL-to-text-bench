@@ -1,12 +1,14 @@
 import json
 import re
-import matplotlib.pyplot as plt
 import os
 import threading
 import time
 from typing import Callable
-from src.SqliteConnector import SqliteConnector
-from src.CliConfig import CliConfig
+
+import matplotlib.pyplot as plt
+
+from src.lib.SqliteConnector import SqliteConnector
+from src.lib.CliConfig import CliConfig
 
 
 def log(msg: str) -> None:

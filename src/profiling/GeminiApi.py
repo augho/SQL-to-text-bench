@@ -1,9 +1,11 @@
 from __future__ import annotations
+from typing import Type, TypeVar, Generic
+
 from google import genai
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
-from typing import Type, TypeVar, Generic
-from src.MetadataModel import TableMetadata, ColumnMetadata
+
+from src.profiling.MetadataModel import TableMetadata, ColumnMetadata
 
 
 T = TypeVar("T")
@@ -19,6 +21,7 @@ class FieldDescription(BaseModel):
     def from_metadata(field_metadata: ColumnMetadata) -> FieldDescription:
         return FieldDescription(name=field_metadata.name, description="")
 
+
 class TableDescription(BaseModel):
     """A structured description of an SQL table and its fields"""
 
@@ -33,7 +36,12 @@ class TableDescription(BaseModel):
 
     @staticmethod
     def from_metadata(table_metadata: TableMetadata) -> TableDescription:
-        return TableDescription(table="", columns=[FieldDescription.from_metadata(f) for f in table_metadata.columns])
+        return TableDescription(
+            table="",
+            columns=[FieldDescription.from_metadata(f) for f in table_metadata.columns],
+        )
+
+
 class ModelOutput(BaseModel, Generic[T]):
     success: bool
     error: str | None
@@ -80,13 +88,14 @@ class Gemini:
         response = self._generate_json(prompt, TableDescription)
 
         if response is None:
-            return TableDescriptionOutput(success=False, error="Generation failed", data=TableDescription.empty())
+            return TableDescriptionOutput(
+                success=False, error="Generation failed", data=TableDescription.empty()
+            )
 
         try:
             parse_result = TableDescription.model_validate_json(response)
         except ValidationError:
             parse_result = None
-
 
         # parse_result = str_to_json(response)
 

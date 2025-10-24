@@ -1,5 +1,5 @@
-from src.SqliteConnector import SqliteConnector
-from src.common.utils import (
+from src.lib.SqliteConnector import SqliteConnector
+from src.lib.utils import (
     log,
     write_json,
     read_dir_files,
@@ -7,10 +7,10 @@ from src.common.utils import (
     human_in_the_loop,
     sqlite_export,
 )
-from src.GeminiApi import Gemini, ModelOutput, TableDescriptionOutput, TableDescription
-from src.common.string_utils import table_desc_creation_str, field_desc_creation_str
-from src.CliConfig import CliConfig, OutputFormat
-from src.MetadataModel import (
+from src.profiling.GeminiApi import Gemini, ModelOutput, TableDescriptionOutput, TableDescription
+from src.lib.string_utils import table_desc_creation_str, field_desc_creation_str
+from src.lib.CliConfig import CliConfig, OutputFormat
+from src.profiling.MetadataModel import (
     DatabaseMetadata,
     LengthMetaData,
     TableMetadata,

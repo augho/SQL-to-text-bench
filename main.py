@@ -1,17 +1,17 @@
 import datetime
 
-from src.BenchInput import BenchInput
-from src.BenchOutput import BenchOutput
-from src.Processer import Processer
-from src.SqliteConnector import SqliteConnector
-from src.common.utils import (
+from src.bench.BenchInput import BenchInput
+from src.bench.BenchOutput import BenchOutput
+from src.bench.Processer import Processer
+from src.lib.SqliteConnector import SqliteConnector
+from src.lib.utils import (
     check_equality,
     write_json,
     json_to_str,
     human_in_the_loop,
     read_json,
 )
-from src.AiInsightApi import AiInsightApi
+from src.bench.AiInsightApi import AiInsightApi
 
 
 def construct_input(input_path: str) -> list[BenchInput]:

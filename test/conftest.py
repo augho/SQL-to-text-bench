@@ -1,5 +1,5 @@
-from src.CliConfig import CliConfig, OutputFormat
-from src.SqliteConnector import SqliteConnector
+from src.lib.CliConfig import CliConfig, OutputFormat
+from src.lib.SqliteConnector import SqliteConnector
 import pytest
 
 
@@ -16,6 +16,7 @@ def db():
         do_llm_summary=False,
         save_metadata=False,
         dry_run=True,
+        skip_human_in_the_loop=True
     )
     db: SqliteConnector = SqliteConnector("db/Chinook.db")
     yield db

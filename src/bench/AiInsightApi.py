@@ -3,9 +3,9 @@ import threading
 import time
 import json
 
-from src.BenchInput import BenchInput, ListId
-from src.BenchOutput import BenchOutput
-from src.common.utils import human_in_the_loop
+from src.bench.BenchInput import BenchInput, ListId
+from src.bench.BenchOutput import BenchOutput
+from src.lib.utils import human_in_the_loop
 
 
 class AiInsightApi:
