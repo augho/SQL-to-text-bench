@@ -1,185 +1,234 @@
 from src.SqliteConnector import SqliteConnector
-from src.common.utils import write_json, create_dir_if_not_exists, read_dir_files, read_json, run_rate_limited_tasks, human_in_the_loop, sqlite_export, json_import
-from src.GeminiApi import Gemini
-from enum import Enum
+from src.common.utils import (
+    log,
+    write_json,
+    read_dir_files,
+    read_json,
+    run_rate_limited_tasks,
+    human_in_the_loop,
+    sqlite_export,
+)
+from src.GeminiApi import Gemini, ModelOutput
 from src.common.string_utils import table_desc_creation_str, field_desc_creation_str
-import argparse
+from src.CliConfig import CliConfig, OutputFormat
+from src.MetadataModel import (
+    DatabaseMetadata,
+    LengthMetaData,
+    TableMetadata,
+    ColumnMetadata,
+)
 
-class OutputFormat(Enum):
-    SQLITE = 'sqlite',
-    JSON = 'json',
-    CSV = 'csv'
 
 def table_profile(
-        db: SqliteConnector,
-        tablename: str,
-        topk: int,
-        sample_size: int,
-        prefix_len: int
-    ):
-    info: dict[str, str | int | list] = {}
-    info["table_name"] = tablename
-    info["row_count"] = db.table_row_count(tablename)
+    db: SqliteConnector, tablename: str, sample_size: int
+) -> TableMetadata:
+    row_count = db.table_row_count(tablename)
 
     cols = db.table_columns(tablename)
-    info["columns"] = []
 
+    columns_metadata = []
     for c in cols:
         column_name = c["column_name"]
-        column_info = {
-            "name": column_name,
-            "declared_type": c["column_type"],
-            "allows_null": c["allows_null"],
-            "is_pk": c["is_pk"]
-        }
+        column_type = c["column_type"]
+        allows_null = c["allows_null"]
+        is_pk = c["is_pk"]
         null_count, non_null_count = db.count_nulls_and_nonnulls(tablename, column_name)
-        column_info["null_count"] = null_count
-        column_info["non_null_count"] = non_null_count
-        column_info["distinct_count"] = db.distinct_count(tablename, column_name)
+        distinct_count = db.distinct_count(tablename, column_name)
 
         # TODO do max/min only for integer and not for string
-        if non_null_count > 0:
-            mn, mx = db.min_max_for_column(tablename, column_name)
-            column_info["min_value"] = mn
-            column_info["max_value"] = mx
-
-        min_len, avg_len, max_len = db.length_stats_sql(tablename, column_name)
-        column_info["length"] = {"min": min_len, "average": avg_len, "max": max_len}
-
-        # if non_null_count > 0:
-        #     column_info["top_k"] = []
-        # else:
-        #     column_info["top_k"] = []
-
-        if non_null_count > 0 and sample_size > 0:
-            samples = db.sample_values(tablename, column_name, sample_size=sample_size)
-            MAX_PREVIEW_SIZE = 5
-            column_info["samples"] = samples[: min(MAX_PREVIEW_SIZE, len(samples) -1)]
-
-        info["columns"].append(column_info)
-
-    return info
-
-
-def run_metadata_extraction(db: SqliteConnector, output_folder_path: str) -> None:
-    for tablename in db.list_tables():
-        result = table_profile(
-            db=db,
-            tablename=tablename,
-            topk=5, 
-            sample_size=10,
-            prefix_len= 5
+        mn, mx = (
+            None,
+            None
+            if non_null_count > 0
+            else db.min_max_for_column(tablename, column_name),
         )
 
-        write_json(f'{output_folder_path}/{tablename}.json', result)
+        min_len, avg_len, max_len = db.length_stats_sql(tablename, column_name)
 
-def run_metadata_llm_summary(metadata_folder_path: str, report_filename: str,  max_rpm: int, do_logging: bool) -> None:
-    db_meta_data = {}
-    for filename in read_dir_files(metadata_folder_path):
-        if filename.endswith(".llm.json") or filename.endswith(".llm.sqlite"):
+        samples = []
+        if non_null_count > 0 and sample_size > 0:
+            samples = db.sample_values(tablename, column_name, sample_size=sample_size)
+            # TODO maybe change this max preview to be configurable
+            MAX_PREVIEW_SIZE = 5
+            samples = samples[: min(MAX_PREVIEW_SIZE, len(samples) - 1)]
+
+        col_metadata = ColumnMetadata(
+            name=column_name,
+            declared_type=column_type,
+            allows_null=allows_null,
+            is_pk=is_pk,
+            null_count=null_count,
+            non_null_count=non_null_count,
+            distinct_count=distinct_count,
+            min_value=mn,
+            max_value=mx,
+            length=LengthMetaData(min_len, avg_len, max_len),
+            samples=samples,
+        )
+        columns_metadata.append(col_metadata)
+
+    return TableMetadata(tablename, columns_metadata, row_count)
+
+
+def read_metadata_backup_folder(foldername: str) -> DatabaseMetadata:
+    tables: list[TableMetadata] = []
+    for filename in read_dir_files(foldername):
+        if not filename.endswith(".json") or filename.endswith(".llm.json"):
             continue
-        tablename = filename.removesuffix(".json")
-        table_meta_data = read_json(metadata_folder_path + "/" + filename)
 
-        db_meta_data[tablename] = table_meta_data
+        table = TableMetadata.from_file(foldername + "/" + filename)
+        if table is None:
+            raise Exception(f"Failed to load table metadata for {filename}")
+        tables.append(table)
+
+    if len(tables) == 0:
+        raise FileNotFoundError(
+            "No metadata found in folder", CliConfig.get().output_path
+        )
+
+    return DatabaseMetadata(foldername, tables)
 
 
-    if len(db_meta_data.keys()) == 0:
-        raise FileNotFoundError("No metadata found in folder", metadata_folder_path)
-    
-    
+def run_metadata_extraction() -> DatabaseMetadata:
+    db = SqliteConnector(CliConfig.get().filename)
+    db_metadata = {}
+    tables: list[TableMetadata] = []
+    for tablename in db.list_tables():
+        result = table_profile(db=db, tablename=tablename, sample_size=10)
+        db_metadata[tablename] = result
+        tables.append(result)
 
-    def generation_cb(tablename, table_metadata, output_dict):
+    return DatabaseMetadata(CliConfig.get().filename, tables)
+
+
+# TODO fix this fn
+def fix_generated_output(
+    generation_result: dict, db_metadata: DatabaseMetadata
+) -> None:
+    for tablename, metadat in db_metadata.items():
+        if tablename not in generation_result:
+            generation_result[tablename] = {
+                "description": "",
+                "error": "Generation failed",
+                "success": False,
+            }
+
+
+def run_metadata_llm_summary(
+    db_metadata: DatabaseMetadata | None, report_filename: str
+) -> None:
+    # TODO add a custom folder
+    # If no extraction we read the output folder for backed up file
+    if CliConfig.get().do_extraction:
+        db_metadata = read_metadata_backup_folder(CliConfig.get().output_path)
+
+    assert db_metadata is not None
+
+    def generation_cb(
+        table_metadata: TableMetadata, output_dict: dict[str, ModelOutput]
+    ):
         result = gemini.summarize_table_metadata(table_metadata)
-        output_dict[tablename] = result
-
+        output_dict[table_metadata.name] = result
 
     gemini = Gemini()
-    generations_output = {}
+    generations_output: dict[str, ModelOutput] = {}
 
-    run_args = [(tablename, metadata, generations_output) for tablename, metadata in db_meta_data.items()]
+    run_args = [(table, generations_output) for table in db_metadata.tables]
 
-    if do_logging:
-        print("\n======= RUN DETAILS =======")
-        print(f"llm_model: {gemini.model_name}")
-        print(f"# of input tables: {len(run_args)}")
-        print(f"table_list: {[x[0] for x in run_args]}")
-        print(f"output_path: {metadata_folder_path}/{report_filename}.llm.json")
-        print(f"Max RPM: {max_rpm}")
-        print("========            =======\n")
+    log("\n======= RUN DETAILS =======")
+    log(f"llm_model: {gemini.model_name}")
+    log(f"# of input tables: {len(run_args)}")
+    log(f"table_list: {[x[0] for x in run_args]}")
+    log(f"output_path: {CliConfig.get().output_path}/{report_filename}.llm.json")
+    log(f"Max RPM: {CliConfig.get().max_rpm}")
+    log("========            =======\n")
 
     # If no logging set we don't ask for confirmation
-    proceed_confirmation = True if not do_logging else human_in_the_loop(
-            "Do you wish to continue (y/n)?"
+    proceed_confirmation = (
+        True
+        if not CliConfig.get().do_logging
+        else human_in_the_loop("Do you wish to continue (y/n)?")
     )
 
-
     if not proceed_confirmation:
-        if do_logging:
-            print("\n[WARN] Aborting llm table summarization !\n")
+        log("\n[WARN] Aborting llm table summarization !\n")
         return
-    
+
+    # TODO add a way to read from a saved output instead
     # ---------------------------------
     # Rate limited api calls
-    # run_rate_limited_tasks(
-    #     cb=generation_cb,
-    #     cb_args=run_args,
-    #     max_rpm=max_rpm,
-    #     do_logging=True
-    # )
+    run_rate_limited_tasks(
+        cb=generation_cb,
+        cb_args=run_args,
+        max_rpm=CliConfig.get().max_rpm,
+        do_logging=CliConfig.get().do_logging,
+    )
 
-    generations_output = json_import("out/profiles/Chinook/ty_gemini.llm.json")
+    # Ensures model didn't hallucinate table or field name
+    fix_generated_output(generation_result, db_metadata)  # noqa: F821
 
-    # TODO Ensure data structure even when generation fails (only the desc field should be empty and error and succes adapted)
-    success = export_tool(generations_output, f"{metadata_folder_path}/{report_filename}.llm", OutputFormat.SQLITE, do_logging)
+    # generations_output = json_import("out/profiles/Chinook/ty_gemini.llm.json")
 
+    success = export_tool(
+        generations_output,
+        f"{CliConfig.get().output_path}/{report_filename}.llm",
+        CliConfig.get().output_format,
+    )
+
+    # TODO handle failed to export. Log ? or something
     if success:
         print("ok")
-        return
+
     else:
         print("err")
-        return
+
     success_count = 0
     error_count = 0
-    for tablename, generation_result in generations_output:
-        if not isinstance(generation_result, dict):
-            error_count += 1
-            continue
-
-        # TODO make sure the column names generated match and correct error if not
-        
-        if generation_result.get("success", False):
+    for _, model_output in generations_output:
+        if not model_output.success:
             success_count += 1
         else:
             error_count += 1
 
-    if do_logging:
-        print("\n======= RUN RESULT =======")
-        print(f"# success: {success_count}")
-        print(f"# errors: {error_count}")
-        print(f"\n[LOG] Summary generated at {metadata_folder_path}/{report_filename}.llm.json\n")
+    log("\n======= RUN RESULT =======")
+    log(f"# success: {success_count}")
+    log(f"# errors: {error_count}")
+    log(
+        f"\n[LOG] Summary generated at {CliConfig.get().output_path}/{report_filename}.llm.json\n"
+    )
 
-def export_tool(data: dict, filepath: str, format: OutputFormat, do_logging: bool) -> bool:    
+
+def export_tool(
+    model_outputs: dict[str, ModelOutput], filepath: str, format: OutputFormat
+) -> bool:
     match format:
         case OutputFormat.JSON:
-            return write_json(filepath + ".json", json_output=data)
+            return write_json(
+                filepath + ".json", json_output={k: v for k, v in model_outputs}
+            )
         case OutputFormat.SQLITE:
             # (tablename, sql query to create table)
             schema: list[tuple[str, str]] = [
                 ("table_description", table_desc_creation_str),
-                ("field_description", field_desc_creation_str)
+                ("field_description", field_desc_creation_str),
             ]
             sql_data: list[list[tuple]] = [[], []]
 
             # Defining schema
-            for tablename, _ in data.items():
+            for tablename, _ in model_outputs.items():
                 schema.append((tablename, table_desc_creation_str))
             # Defining tuples to be inserted
             field_count: int = 0
-            for i, (k, gen_data) in enumerate(data.items()):
+            for i, (k, gen_data) in enumerate(model_outputs.items()):
                 # ---- TABLE DESCRIPTIONS
                 # (id, name, desc)
-                sql_data[0].append((i, k, None if not gen_data["success"] else gen_data["data"]["table"]))
+                sql_data[0].append(
+                    (
+                        i,
+                        k,
+                        None if not gen_data["success"] else gen_data["data"]["table"],
+                    )
+                )
                 # ---- FIELD DESCRIPTIONS
                 # (id, table_id, name, desc)
                 fields = gen_data["data"]["columns"]
@@ -188,112 +237,54 @@ def export_tool(data: dict, filepath: str, format: OutputFormat, do_logging: boo
                     sql_data[1].append((field_count, i, f["name"], f["descrition"]))
                     field_count += 1
 
-
-            return sqlite_export(sql_data, schema, filepath + '.sqlite', do_logging)
+            return sqlite_export(sql_data, schema, filepath + ".sqlite")
         case _:
             raise ValueError(f"Output format unsupported: {format}")
 
+
 def run():
-    parser = argparse.ArgumentParser(description="Tool to read a database and generate a description of its fields and tables using a LLM")
-
-    def max_rpm_check(v):
-        try:
-            v = int(v)
-            if v > 0:
-                return v
-            elif v == -1:
-                return -1
-            else:
-                raise argparse.ArgumentTypeError(f"'{v}' must be > 0 or set to -1 to disable rate limiting")
-        except ValueError:
-                raise argparse.ArgumentTypeError(f"'{v}' is not a valid integer")
-
-    def out_type_check(v):
-        match v:
-            case 'sqlite':
-                return 'sqlite'
-            case 'json':
-                return 'json'
-            case _:
-                raise argparse.ArgumentTypeError("Supported output types are 'sqlite' and 'json'")
-    
-    # ----------------------------------------------
-    # Tweak input
-    parser.add_argument("filename", type=str, help="Path to the sqlite db file")
-
-    # ----------------------------------------------
-    # Tweak execution
-    parser.add_argument("-s", "--silent", action="store_true",
-                        help="Disable logging")
-
-    parser.add_argument("-m", "--max-rpm", type=max_rpm_check, default=9, help="Maximum # of requests per minute sent to the LLM api (to disable rate limit set to -1)")
-
-    # -----------------------------------------------
-    # Tweak output
-    parser.add_argument("-o", "--output-path", type=str, default="",
-                        help="Folder where the output will be written")
-    
-    parser.add_argument("-f", "--output-format", type=out_type_check, default='json', help="Specify the output format json(default), sqlite, csv(unsupported)")
-    
-
-    # -----------------------------------------------
-    # Skip some execution
-    parser.add_argument("--no-extraction", action="store_true", help="[DEV] Skip the sql part and reads metadata from json files")
-    parser.add_argument("--no-llm", action="store_true", help="[DEV] Skip the llm querying")
-
-    parser.add_argument("--dry-run", action="store_false")
-
-    args = parser.parse_args()
-    
+    CliConfig.init()
 
     # 4. Use the arguments
     print("--- Starting Script ---")
-    print(f"File to process: {args.filename}")
-    print(f"Silent mode: {args.silent}")
-    print(f"Out path and format: {args.output_path}, {args.output_format}")
-    print(f"RPM: {args.max_rpm}")
-    run_metadata_llm_summary(
-        metadata_folder_path=args.output_path,
-        report_filename="ty_gemini",
-        do_logging=not args.silent,
-        max_rpm=args.max_rpm
-    )
-    print("--- Script Finished ---")
+    print(CliConfig.get())
+    print()
 
-    
+    extracted_metadata = None
+    if CliConfig.get().dry_run:
+        log(
+            f"[DRY] run_metadata_extraction: reading metadata from {CliConfig.get().filename}"
+        )
+    elif CliConfig.get().do_extraction:
+        extracted_metadata = run_metadata_extraction()
+        if CliConfig.get().save_metadata:
+            for tablename, metadata in extracted_metadata.items():
+                write_json(f"{CliConfig.get().output_path}/{tablename}.json", metadata)
+    else:
+        log("[LOG] Skipped metadata extraction")
+
+    if CliConfig.get().dry_run:
+        if extracted_metadata is None:
+            log(
+                f"[DRY] run_metadata_llm_summary: summarizing metadata saved @ {CliConfig.get().output_path}"
+            )
+        else:
+            log(
+                f"[DRY] run_metadata_llm_summary: summarizing metadata from {len(extracted_metadata.keys())} tables"
+            )
+
+    elif CliConfig.get().do_llm_summary:
+        run_metadata_llm_summary(
+            db_metadata=extracted_metadata, report_filename="ty_gemini"
+        )
+    else:
+        log("[LOG] Skipped llm summary")
+
+
+def test():
+    print(LengthMetaData(min=1, average=2, max=3).model_dump_json())
+
+
 if __name__ == "__main__":
-    db_filepath = "./db/Chinook.db"
-    db = SqliteConnector(db_filepath)
-
-    DB_NAME = 'Chinook'
-    OUTPUT_FOLDER = f"out/profiles/{DB_NAME}"
-    REPORT_NAME = "ty_gemini"
-    MAX_RPM = 9
-    
-    run()
-
-    # DO_METADATA_EXTRACTION = human_in_the_loop(
-    #     "Do you want to do run sql queries to extract metadata (y/N) ?",
-    #     do_default=(True, 'n')
-    # )
-    # DO_LLM_SUMMARY = human_in_the_loop(
-    #     "Do you want to generate table description w/ a LLM (Y/n) ?",
-    #     do_default=(True, 'y')
-    # )
-
-
-
-
-    # if DO_METADATA_EXTRACTION:
-    #     create_dir_if_not_exists(OUTPUT_FOLDER)
-    #     run_metadata_extraction(db, output_folder_path=OUTPUT_FOLDER)
-    # if DO_LLM_SUMMARY:
-    #     run_metadata_llm_summary(metadata_folder_path=OUTPUT_FOLDER, report_filename=REPORT_NAME, max_rpm=MAX_RPM)
-
-
-
-
-
-    
-    
-    
+    # run()
+    test()

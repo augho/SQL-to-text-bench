@@ -3,6 +3,13 @@ from dotenv import load_dotenv
 from src.common.utils import str_to_json
 from pydantic import BaseModel, Field
 from typing import Type
+from src.MetadataModel import TableMetadata
+
+
+class ModelOutput(BaseModel):
+    success: bool
+    error: str | None
+    data: str
 
 
 class Gemini:
@@ -34,32 +41,30 @@ class Gemini:
 
         return ""
 
-    def summarize_table_metadata(self, table_metadata: dict) -> dict:
+    def summarize_table_metadata(
+        self, table_metadata: TableMetadata | str
+    ) -> ModelOutput:
         prompt = table_summarization_prompt_init(table_metadata)
 
         response = self._generate_json(prompt, TableDescription)
 
         if response is None:
-            return {"success": False, "error": "Generation failed", "data": None}
+            return ModelOutput(False, "Generation failed", None)
 
         parse_result = str_to_json(response)
 
         if parse_result is None:
-            return {
-                "success": False,
-                "error": "Model didn't repsond with valid json",
-                "data": response,
-            }
+            return ModelOutput(False, "Model didn't respond with valid json", response)
 
-        return {"success": True, "error": None, "data": parse_result}
+        return ModelOutput(success=True, error=None, data=parse_result)
 
 
-def table_summarization_prompt_init(table_metadata: str | dict):
+def table_summarization_prompt_init(table_metadata: str | TableMetadata):
     return f"""
 Given the following sql table meta data. Give me a short description of each column of the table and then a short descrition of the table.
 You MUST respect the given output format which should be ONLY valid json
 **Table meta data**
-{table_metadata}
+{table_metadata if isinstance(table_metadata, str) else table_metadata.model_dump_json()}
 
 **Output format**
 {{

@@ -11,3 +11,15 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "requests>=2.32.5",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
+[tool.pyright]
+# Suppress the diagnostic by setting it to false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnboundVariable = false
+reportAny = false
+typeCheckingMode= "basic"

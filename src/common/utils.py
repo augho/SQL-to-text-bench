@@ -6,6 +6,12 @@ import threading
 import time
 from typing import Callable
 from src.SqliteConnector import SqliteConnector
+from src.CliConfig import CliConfig
+
+
+def log(msg: str) -> None:
+    if CliConfig.get().do_logging:
+        print(msg)
 
 
 def read_json(filepath: str) -> dict:
@@ -27,6 +33,7 @@ def write_json(filepath: str, json_output: dict | list) -> bool:
         return False
     return True
 
+
 def json_import(filepath: str) -> dict:
     try:
         with open(filepath, "r") as json_file:
@@ -37,15 +44,15 @@ def json_import(filepath: str) -> dict:
         print("[ERROR] While reading|parsing the json file", filepath)
         raise err
 
+
 def sqlite_export(
     data: list[list[tuple]],
     schema: list[tuple[str, str]],
     filepath: str,
-    do_logging: bool,
 ) -> bool:
     os.remove(filepath)
 
-    db = SqliteConnector(filepath, do_logging)
+    db = SqliteConnector(filepath, CliConfig.get().do_logging)
     success = True
     for (tablename, create_table), table_data in zip(schema, data):
         success = success and db.execute(create_table)
@@ -58,7 +65,6 @@ def sqlite_export(
         )
 
     if not success:
-        # TODO cleanup db file if created
         os.remove(filepath)
         return False
     return True

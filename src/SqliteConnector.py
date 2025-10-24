@@ -59,11 +59,11 @@ class SqliteConnector:
         def select(conn: sqlite3.Connection) -> None:
             cursor = conn.cursor()
             cursor.execute(sql_query)
-        
+
         success, _ = self._raw_dog_conn(select)
 
         return success
-    
+
     def insert(self, insert_query: str, data: list[tuple]) -> bool:
         def insert(conn: sqlite3.Connection) -> bool:
             cursor = conn.cursor()
@@ -93,8 +93,8 @@ class SqliteConnector:
 
     def has_table(self, tablename: str) -> bool:
         table_list = self.select(f"""
-            SELECT name 
-            FROM sqlite_master 
+            SELECT name
+            FROM sqlite_master
             WHERE type='table'
             AND name='{tablename}';""")
         if table_list is None:
@@ -104,8 +104,8 @@ class SqliteConnector:
 
     def list_tables(self) -> list[str]:
         name_list = self.select("""
-            SELECT name 
-            FROM sqlite_master 
+            SELECT name
+            FROM sqlite_master
             WHERE type='table';""")
 
         if name_list is None:
@@ -116,7 +116,7 @@ class SqliteConnector:
     # -----------------------------------------------
     # Stats for the profiler
 
-    def table_columns(self, tablename: str):
+    def table_columns(self, tablename: str) -> list[dict[str, Any]]:
         # Returns list of dicts: {cid, name, type, notnull, dflt_value, pk}
         q = f"PRAGMA table_info({tablename})"
         result = self.select(q, FetchType.ALL)
@@ -140,13 +140,13 @@ class SqliteConnector:
         return cols
 
     def table_row_count(self, tablename: str) -> int:
-        result = self.select(
-            f'SELECT COUNT(*) FROM "{tablename}"', fetch=FetchType.ONE
-        )
+        result = self.select(f'SELECT COUNT(*) FROM "{tablename}"', fetch=FetchType.ONE)
         assert result is not None, f"[ASSERT] tablename={tablename}"
         return result[0]
 
-    def count_nulls_and_nonnulls(self, tablename, column_name):
+    def count_nulls_and_nonnulls(
+        self, tablename: str, column_name: str
+    ) -> tuple[int, int]:
         q = (
             f"SELECT SUM(CASE WHEN {column_name} IS NULL THEN 1 ELSE 0 END) as nulls, "
             f"SUM(CASE WHEN {column_name} IS NOT NULL THEN 1 ELSE 0 END) as nonnulls FROM {tablename}"
@@ -165,7 +165,7 @@ class SqliteConnector:
 
         return nulls, nonnulls
 
-    def distinct_count(self, tablename, column_name) -> int:
+    def distinct_count(self, tablename: str, column_name: str) -> int:
         q = f"SELECT COUNT(DISTINCT {column_name}) FROM {tablename}"
 
         result = self.select(q, FetchType.ONE)
@@ -175,7 +175,9 @@ class SqliteConnector:
         # check type of result
         return int(result[0] or 0)
 
-    def min_max_for_column(self, tablename, column_name):
+    def min_max_for_column(
+        self, tablename, column_name
+    ) -> tuple[int, int] | tuple[None, None]:
         # We attempt MIN/MAX directly; for mixed types SQLite will try to compare.
         q = f"SELECT MIN({column_name}), MAX({column_name}) FROM {tablename} WHERE {column_name} IS NOT NULL"
 
@@ -186,9 +188,11 @@ class SqliteConnector:
 
         if result is None:
             return None, None
-        return result[0], result[1]
+        return int(result[0]), int(result[1])
 
-    def length_stats_sql(self, tablename, column_name):
+    def length_stats_sql(
+        self, tablename: str, column_name: str
+    ) -> tuple[int | None, float | None, int | None]:
         # For text-like values compute min/avg/max length using LENGTH().
         q = (
             f"SELECT MIN(LENGTH({column_name})), AVG(LENGTH({column_name})), MAX(LENGTH({column_name})) "
