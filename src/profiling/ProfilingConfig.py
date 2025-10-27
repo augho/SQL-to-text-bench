@@ -10,13 +10,13 @@ class ProfilingConfig(Config):
     DO_LLM_SUMMARY: bool
     SAVE_METADATA: bool
 
-    @staticmethod
-    def init(config: ProfilingConfig):
-        Config.init(config)
-        ProfilingConfig.OUTPUT_FORMAT = config.OUTPUT_FORMAT
-        ProfilingConfig.DO_EXTRACTION = config.DO_EXTRACTION
-        ProfilingConfig.DO_LLM_SUMMARY = config.DO_LLM_SUMMARY
-        ProfilingConfig.SAVE_METADATA = config.SAVE_METADATA
+    @classmethod
+    def init(cls, config: ProfilingConfig):
+        super().init(config)
+        cls.OUTPUT_FORMAT = config.OUTPUT_FORMAT
+        cls.DO_EXTRACTION = config.DO_EXTRACTION
+        cls.DO_LLM_SUMMARY = config.DO_LLM_SUMMARY
+        cls.SAVE_METADATA = config.SAVE_METADATA
 
     @staticmethod
     def create_from_parser() -> ProfilingConfig:
