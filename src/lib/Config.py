@@ -19,14 +19,15 @@ class Config(BaseModel):
     DRY_RUN: bool 
     SKIP_INTERACTIONS: bool
 
-    @classmethod
-    def init(cls, config: Config):
-        cls.DO_LOGGING = config.DO_LOGGING
-        cls.DB_CONN_STRING = config.DB_CONN_STRING
-        cls.MAX_RPM = config.MAX_RPM
-        cls.OUTPUT_PATH = config.OUTPUT_PATH
-        cls.DRY_RUN = config.DRY_RUN
-        cls.SKIP_INTERACTIONS = config.SKIP_INTERACTIONS 
+    # Must be defined as static and not class otherwise pyantic raises
+    @staticmethod
+    def init(config: Config):
+        Config.DO_LOGGING = config.DO_LOGGING
+        Config.DB_CONN_STRING = config.DB_CONN_STRING
+        Config.MAX_RPM = config.MAX_RPM
+        Config.OUTPUT_PATH = config.OUTPUT_PATH
+        Config.DRY_RUN = config.DRY_RUN
+        Config.SKIP_INTERACTIONS = config.SKIP_INTERACTIONS 
 
     @staticmethod
     def arg_max_rpm_validate(v) -> int:

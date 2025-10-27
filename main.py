@@ -1,4 +1,5 @@
-import datetime
+import argparse
+from src.lib.Config import Config
 
 from src.bench.BenchInput import BenchInput
 from src.bench.BenchOutput import BenchOutput
@@ -10,8 +11,15 @@ from src.lib.utils import (
     json_to_str,
     human_in_the_loop,
     read_json,
+    log,
 )
 from src.bench.AiInsightApi import AiInsightApi
+from src.bench.BenchConfig import (
+    BenchConfig,
+    RunType,
+    arg_appsettings_validate,
+    arg_run_type_validate,
+)
 
 
 def construct_input(input_path: str) -> list[BenchInput]:
@@ -19,28 +27,24 @@ def construct_input(input_path: str) -> list[BenchInput]:
     return list(map(lambda j: BenchInput.init_from_json(j), json_file["input"]))
 
 
-def test_db(db_filepath, do_logging: bool = True):
-    db = SqliteConnector(db_filepath, do_logging=do_logging)
+def test_db():
+    db = SqliteConnector(BenchConfig.DB_CONN_STRING, do_logging=BenchConfig.DO_LOGGING)
+
     assert db.test(), "Connection test failed"
 
-    if do_logging:
-        print("[LOG] CONN TEST SUCCESS")
+    log("[LOG] CONN TEST SUCCESS")
 
     assert db.has_table("Album")
-    if do_logging:
-        print("[LOG] TABLE CHECK SUCCESS")
+
+    log("[LOG] TABLE CHECK SUCCESS")
 
     db.do_logging = False
     assert db.select("this is not sql") is None
-    db.do_logging = do_logging
+    db.do_logging = BenchConfig.DO_LOGGING
 
     # print(db.tables_names())
-    query_res_1 = db.select(
-        "SELECT AlbumId, ArtistId, Title FROM Album LIMIT 3;"
-    )
-    query_res_2 = db.select(
-        "SELECT Title, AlbumId, ArtistId FROM Album LIMIT 5;"
-    )
+    query_res_1 = db.select("SELECT AlbumId, ArtistId, Title FROM Album LIMIT 3;")
+    query_res_2 = db.select("SELECT Title, AlbumId, ArtistId FROM Album LIMIT 5;")
 
     assert query_res_1 is not None
     assert query_res_2 is not None
@@ -48,12 +52,12 @@ def test_db(db_filepath, do_logging: bool = True):
     assert isinstance(query_res_1, list) and isinstance(query_res_2, list)
 
     assert check_equality(query_res_1, query_res_2)
-    if do_logging:
-        print("[LOG] RESULT COMPARISON CHECK SUCCESS")
+
+    log("[LOG] RESULT COMPARISON CHECK SUCCESS")
 
 
-def test_api(hostname: str, port: int, do_logging: bool = True):
-    agent = AiInsightApi(hostname, port)
+def test_api():
+    agent = AiInsightApi(BenchConfig.API_HOSTNAME, BenchConfig.API_PORT)
     agent.test(
         endpoint="/api/v1/user/1",
         expected={
@@ -63,149 +67,181 @@ def test_api(hostname: str, port: int, do_logging: bool = True):
             "createdAt": "2025-10-15T12:15:08.499296",
         },
     )
-    if do_logging:
-        print("[LOG] API TEST SUCCESS")
+
+    log("[LOG] API TEST SUCCESS")
 
 
-def run_bench(
-    api_hostname: str,
-    api_port: int,
-    input_path: str,
-    output_path: str,
-    use_easy_question: bool = False,
-    do_logging: bool = True,
-):
-    bench_inputs = construct_input(input_path)
-    agent = AiInsightApi(api_hostname, api_port)
+def run_bench():
+
+    bench_inputs = construct_input(BenchConfig.DATASET_PATH)
+    agent = AiInsightApi(BenchConfig.API_HOSTNAME, BenchConfig.API_PORT)
 
     # TODO remove
     # Testing with one request for now
     # bench_inputs = [bench_inputs[0]]
 
-    print("\n======= RUN DETAILS =======")
-    print(f"# of inputs: {len(bench_inputs)}")
-    print(f"use_easy_question: {use_easy_question}")
-    print(f"output_path: {output_path}")
-    print(f"Max RPM: {AiInsightApi.MAX_RPM}")
-    print("========            =======\n")
-    proceed_confirmation = human_in_the_loop("Do you wish to continue (y/n)?")
-    if not proceed_confirmation:
-        if do_logging:
-            print("[LOG] Aborting query benchmark run")
-        return
+    log("\n======= RUN DETAILS =======")
+    log(f"# of inputs: {len(bench_inputs)}")
+    log(f"use_easy_question: {BenchConfig.USE_EASY_QUESTION}")
+    log(f"output_path: {BenchConfig.OUTPUT_PATH}")
+    log(f"Max RPM: {BenchConfig.MAX_RPM}")
+    log("========            =======\n")
 
-    if do_logging:
-        print("\n======== STARTING BENCHMARK ========")
-    bench_outputs = agent.chain_ask(bench_inputs, use_easy_question, do_logging)
-
-    output = {
-        "output": [
-            b.as_dict(with_easy_question=use_easy_question) for b in bench_outputs
-        ]
-    }
-
-    success = write_json(output_path, output)
-
-    if not success:
-        print("Here is the ouput though:")
-        print(json_to_str(output))
-
-
-def run_analysis(
-    filepath: str,
-    db_conn_str: str,
-    do_stats: bool = False,
-    do_err_chart: bool = False,
-    do_gen_chart: bool = False,
-    do_logging: bool = True
-):
-    assert filepath.find(".") == filepath.rfind("."), (
-        "Report path must have only one '.'"
+    proceed_confirmation = (
+        True
+        if BenchConfig.SKIP_INTERACTIONS or BenchConfig.DRY_RUN
+        else human_in_the_loop("Do you wish to continue (y/n)?")
     )
 
-    report = read_json(filepath)
+    if not proceed_confirmation:
+        log("[LOG] Aborting query benchmark run")
+        return
+
+    log("\n======== STARTING BENCHMARK ========")
+    if BenchConfig.DRY_RUN:
+        log("[DRY] Prompting Agent..")
+    else:
+        bench_outputs = agent.chain_ask(bench_inputs, BenchConfig.USE_EASY_QUESTION)
+
+        output = {
+            "output": [
+                b.as_dict(with_easy_question=BenchConfig.USE_EASY_QUESTION)
+                for b in bench_outputs
+            ]
+        }
+
+        success = write_json(BenchConfig.OUTPUT_PATH, output)
+
+        if not success:
+            log("Here is the ouput though:")
+            log(json_to_str(output))
+
+
+def run_analysis():
+    assert BenchConfig.BENCH_REPORT_PATH.find(
+        "."
+    ) == BenchConfig.BENCH_REPORT_PATH.rfind("."), "Report path must have only one '.'"
+
+    report = read_json(BenchConfig.BENCH_REPORT_PATH)
 
     bench_outputs: list[BenchOutput] = [
         BenchOutput.from_dict(o) for o in report["output"]
     ]
 
-    processer = Processer(db_conn_str, bench_outputs)
+    processer = Processer(BenchConfig.DB_CONN_STRING, bench_outputs)
 
     # Changes like so: out/foo.json -> out/foo.stats.json
-    stats_filepath = ".stats.".join(filepath.split("."))
+    stats_filepath = ".stats.".join(BenchConfig.BENCH_REPORT_PATH.split("."))
 
-    if do_stats:
-        stats = processer.construct_stats()
-        write_json(stats_filepath, stats)
+    if BenchConfig.SAVE_STATS:
+        if BenchConfig.DRY_RUN:
+            log(f"[DRY] writing statistics to {stats_filepath}")
+        else:
+            stats = processer.construct_stats()
+            write_json(stats_filepath, stats)
 
-    if do_gen_chart:
-        assert stats_filepath.endswith(".stats.json")
-        gen_chart_output_path = stats_filepath.removesuffix(".stats.json") + ".success_graph.png"
-        Processer.generate_success_graph(stats_filepath, gen_chart_output_path)
-        if do_logging:
-            print(f"Generated generation graph at {gen_chart_output_path}")
-    if do_err_chart:
-        assert stats_filepath.endswith(".stats.json")
+    if BenchConfig.DO_ERROR_CHART:
+        if BenchConfig.DRY_RUN:
+            log("[DRY] creating generation graph")
+        else:
+            assert stats_filepath.endswith(".stats.json")
+            gen_chart_output_path = (
+                stats_filepath.removesuffix(".stats.json") + ".success_graph.png"
+            )
+            Processer.generate_success_graph(stats_filepath, gen_chart_output_path)
+            log(f"Generated generation graph at {gen_chart_output_path}")
 
-        err_chart_output_path = stats_filepath.removesuffix(".stats.json") + ".err_graph.png"
-        Processer.generate_error_graph(stats_filepath, err_chart_output_path)
-        if do_logging:
-            print(f"Generated generation graph at {err_chart_output_path}")
+    if BenchConfig.DO_ERROR_CHART:
+        if BenchConfig.DRY_RUN:
+            log("[DRY] creating error graph")
+        else:
+            assert stats_filepath.endswith(".stats.json")
 
-    print("[LOG] Analysis performed successfully")
+            err_chart_output_path = (
+                stats_filepath.removesuffix(".stats.json") + ".err_graph.png"
+            )
+            Processer.generate_error_graph(stats_filepath, err_chart_output_path)
+
+            log(f"Generated generation graph at {err_chart_output_path}")
+
+    log("[LOG] Analysis performed successfully")
+
+
+def run(run_type: RunType, dry_run: bool, do_logging: bool, skip_interactions: bool):
+    BenchConfig.init(
+        BenchConfig.create_from_appsettings(
+            "./appsettings.json",
+            dry_run=dry_run,
+            do_logging=do_logging,
+            skip_interactions=skip_interactions,
+            run_type=run_type,
+        )
+    )
+
+    if BenchConfig.RUN_TEST:
+        match BenchConfig.RUN_TYPE:
+            case RunType.ANALYSIS:
+                test_db()
+            case RunType.BENCHMARK:
+                test_api()
+            case RunType.BOTH:
+                test_api()
+                test_db()
+
+    if BenchConfig.RUN_TYPE in (RunType.BOTH, RunType.BENCHMARK):
+        if BenchConfig.DRY_RUN:
+            print(
+                f"[DRY] run_bench Running benchmark on {BenchConfig.API_HOSTNAME}:{BenchConfig.API_PORT}"
+            )
+        run_bench()
+
+    if BenchConfig.RUN_TYPE in (RunType.BOTH, RunType.ANALYSIS):
+        if BenchConfig.DRY_RUN:
+            print(
+                f"[DRY] run_analysis on benchmark results in {BenchConfig.BENCH_REPORT_PATH}"
+            )
+        run_analysis()
+
+    # TODO run a comparison between the BenchOutput and the dataset
 
 
 if __name__ == "__main__":
-    config = read_json("./appsettings.json")
-
-    INPUT_FILEPATH = config["input"]["queriesFilepath"]
-    DB_CONN_STR = config["input"]["dbFilepath"]
-    API_HOSTNAME = config["input"]["apiHostname"]
-    API_PORT = config["input"]["apiPort"]
-    CUSTOM_REPORT_PATH = config["input"]["customReportPath"]
-
-    # folder + filename prefix + .json
-    OUTPUT_FILEPATH = config["output"]["folder"]
-    OUTPUT_FILEPATH += config["output"]["filenamePrefix"]
-    OUTPUT_FILEPATH += datetime.datetime.now().strftime(
-        config["output"]["timestampFormat"]
+    parser = argparse.ArgumentParser(
+        description="Tool to evaluate the performance of an agent on txt-to-sql tasks"
     )
-    OUTPUT_FILEPATH += ".json"
-
-    DO_TEST = config["run"]["doTest"]
-    DO_LOGGING = config["run"]["doLogging"]
-    USE_EASY_QUESTION = config["run"]["useEasyQuestion"]
-    AiInsightApi.MAX_RPM = config["run"]["apiMaxRpm"]
-
-    if DO_TEST:
-        test_db(DB_CONN_STR, do_logging=DO_LOGGING)
-        test_api(API_HOSTNAME, API_PORT, do_logging=DO_LOGGING)
-
-    DO_BENCH = human_in_the_loop(
-        f"Do you wish to run the benchmark on {API_HOSTNAME}:{API_PORT} (y/N) ?",
-        do_default=(True, "n"),
+    parser.add_argument(
+        "-s", "--silent", action="store_true", default=False, help="Disable logging"
     )
-    if DO_BENCH:
-        run_bench(
-            api_hostname=API_HOSTNAME,
-            api_port=API_PORT,
-            input_path=INPUT_FILEPATH,
-            output_path=OUTPUT_FILEPATH,
-            use_easy_question=USE_EASY_QUESTION,
-            do_logging=DO_LOGGING,
-        )
-    else:
-        DO_ANALYSIS = human_in_the_loop(
-            f"Do you whish to run an analysis on the following benchmark results{CUSTOM_REPORT_PATH} (Y/n) ?",
-            do_default=(True, "y"),
-        )
-        if DO_ANALYSIS:
-            run_analysis(
-                filepath=CUSTOM_REPORT_PATH,
-                db_conn_str=DB_CONN_STR,
-                do_stats=True,
-                do_gen_chart=True,
-                do_err_chart=True
-            )
+    parser.add_argument(
+        "-d", "--dry-run", action="store_true", default=False, help="Do a dry run"
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=False,
+        help="Skip HIL interactions",
+    )
+    parser.add_argument(
+        "--appsettings",
+        type=arg_appsettings_validate,
+        default="./appsettings.json",
+        help="Json settings file (default=./appsettings.json)",
+    )
+    parser.add_argument(
+        "-t",
+        "--run-type",
+        type=arg_run_type_validate,
+        default="read",
+        help="Specify the output format either analysis, bench or all(unsupported)",
+        required=True,
+    )
 
-    # TODO run a comparison between the BenchOutput and the dataset
+    args = parser.parse_args()
+
+    run(
+        run_type=args.run_type,
+        do_logging=not args.silent,
+        dry_run=args.dry_run,
+        skip_interactions=args.yes,
+    )

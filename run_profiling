@@ -1,6 +1,6 @@
 #!/bin/bash
 
-uv run profiler.py -o out/test --output-format sqlite -m 8 db/Chinook.db
+uv run profiler.py -o out/test --output-format sqlite --dry-run -m 8 db/Chinook.db
 
 # For testing
 # uv run pytest

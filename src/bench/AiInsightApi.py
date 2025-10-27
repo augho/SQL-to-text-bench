@@ -5,11 +5,11 @@ import json
 
 from src.bench.BenchInput import BenchInput, ListId
 from src.bench.BenchOutput import BenchOutput
-from src.lib.utils import human_in_the_loop
+from src.lib.utils import log
+from src.bench.BenchConfig import BenchConfig
 
 
 class AiInsightApi:
-    MAX_RPM: int | None = None
 
     def __init__(self, hostname: str, port: int) -> None:
         self.hostname: str = hostname
@@ -77,34 +77,24 @@ class AiInsightApi:
         return_store.append(result)
 
 
-    def chain_ask(self, bench_inputs: list[BenchInput], easy_mode:bool = False, do_logging: bool = True) -> list[BenchOutput]:
-        if AiInsightApi.MAX_RPM is None:
-            proceed_confirmation = human_in_the_loop(
-                "You haven't set a max RPM for the api calls do you want to proceed (y/n) ?"
-            )
-            if not proceed_confirmation:
-                    if do_logging:
-                        print("[LOG] Canceling API calls")
-                    return []
-            if do_logging: 
-                print("[LOG] Proceeding execution!")
+    def chain_ask(self, bench_inputs: list[BenchInput], easy_mode:bool = False) -> list[BenchOutput]:
+        max_rpm = BenchConfig.MAX_RPM
+
         tasks: list[threading.Thread] = []
         bench_outputs: list[BenchOutput] = []
         for bench_input in bench_inputs:
             tasks.append(threading.Thread(target=self._ask_agent_wrapper, args=(bench_input, easy_mode, bench_outputs)))
         
         # To not hit the LLM Api rate limit we add a delay between requests (the +1 is just to make sure)
-        thread_delay_seconds: float = (60 + 1) / AiInsightApi.MAX_RPM if AiInsightApi.MAX_RPM is not None else 0
+        thread_delay_seconds: float = (60 + 1) / max_rpm if max_rpm is not None else 0
         for i, t in enumerate(tasks):
-            if do_logging:
-                print(f"Starting generation {i + 1}/{len(tasks)}")
+            log(f"Starting generation {i + 1}/{len(tasks)}")
             t.start()
             time.sleep(thread_delay_seconds)
 
         [t.join() for t in tasks]
 
-        if do_logging:
-            print("\n[LOG] SQL GENERATION SUCCESS")
+        log("\n[LOG] SQL GENERATION SUCCESS")
 
         bench_outputs.sort(key= lambda b: b.matching_input.id)
 
