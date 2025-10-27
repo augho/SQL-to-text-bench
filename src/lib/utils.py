@@ -8,11 +8,10 @@ from typing import Callable
 import matplotlib.pyplot as plt
 
 from src.lib.SqliteConnector import SqliteConnector
-from src.lib.CliConfig import CliConfig
-
+from src.lib.Config import Config
 
 def log(msg: str) -> None:
-    if CliConfig.get().do_logging:
+    if Config.DO_LOGGING:
         print(msg)
 
 
@@ -52,9 +51,12 @@ def sqlite_export(
     schema: list[tuple[str, str]],
     filepath: str,
 ) -> bool:
-    os.remove(filepath)
+    try:
+        os.remove(filepath)
+    except FileNotFoundError:
+        pass
 
-    db = SqliteConnector(filepath, CliConfig.get().do_logging)
+    db = SqliteConnector(filepath, Config.DO_LOGGING)
     success = True
     for (tablename, create_table), table_data in zip(schema, data):
         success = success and db.execute(create_table)
@@ -185,8 +187,9 @@ def read_dir_files(path: str) -> list[str]:
 
 
 def run_rate_limited_tasks(
-    cb: Callable, cb_args: list[tuple], max_rpm: int, do_logging: bool
+    cb: Callable, cb_args: list[tuple]
 ):
+    max_rpm = Config.MAX_RPM
     threads: list[threading.Thread] = []
 
     for args in cb_args:
@@ -200,8 +203,7 @@ def run_rate_limited_tasks(
         thread_delay_seconds: float = (60 + 1) / max_rpm
 
     for i, t in enumerate(threads):
-        if do_logging:
-            print(f"Starting task {i + 1}/{len(threads)}")
+        log(f"Starting task {i + 1}/{len(threads)}")
         t.start()
 
         if thread_delay_seconds > 0:

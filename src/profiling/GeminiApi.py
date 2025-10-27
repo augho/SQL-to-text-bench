@@ -139,3 +139,21 @@ You MUST respect the given output format which should be ONLY valid json
     ],
     "table": "The **Employee_Sales** table functions as a **fact table** used for sales analysis. Its structure links a specific employee (via **EmployeeID**) to a quantitative performance metric (**Quarterly_Revenue**). Since EmployeeID is not unique across all rows, the table is designed to capture **time-series or periodic metrics** (like quarterly data) for each employee, making it ideal for tracking performance trends and aggregations."
 }}"""
+
+
+table_desc_creation_str = """
+CREATE TABLE IF NOT EXISTS table_description (
+    id INT PRIMARY KEY,
+    name TEXT,
+    description TEXT
+)
+"""
+
+field_desc_creation_str = """
+CREATE TABLE IF NOT EXISTS field_description (
+    id INT PRIMARY KEY,
+    table_id INT,
+    name TEXT,
+    description TEXT
+)
+"""

@@ -50,21 +50,3 @@ def remove_json_markdown(dirty_string: str) -> str:
 #         if len(s) >= 1:
 #             prefs[s[:prefix_len]] += 1
 #     return prefs.most_common(top_n)
-
-
-table_desc_creation_str = """
-CREATE TABLE IF NOT EXISTS table_description (
-    id INT PRIMARY KEY,
-    name TEXT,
-    description TEXT
-)
-"""
-
-field_desc_creation_str = """
-CREATE TABLE IF NOT EXISTS field_description (
-    id INT PRIMARY KEY,
-    table_id INT,
-    name TEXT,
-    description TEXT
-)
-"""

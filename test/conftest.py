@@ -1,4 +1,5 @@
-from src.lib.CliConfig import CliConfig, OutputFormat
+from src.lib.Config import OutputFormat
+from src.profiling.ProfilingConfig import ProfilingConfig
 from src.lib.SqliteConnector import SqliteConnector
 import pytest
 
@@ -6,19 +7,22 @@ import pytest
 @pytest.fixture(scope="session")
 def db():
     print("Starting initialization...")
-    CliConfig.advanced_init(
-        filename="db/Chinook.db",
-        do_logging=False,
-        max_rpm=9,
-        output_path="out/test",
-        output_format=OutputFormat.JSON,
-        do_extraction=False,
-        do_llm_summary=False,
-        save_metadata=False,
-        dry_run=True,
-        skip_human_in_the_loop=True
+    db_conn_string = "db/Chinook.db"
+    test_profiling_config = ProfilingConfig(
+        DB_CONN_STRING=db_conn_string,
+        DO_LOGGING=False,
+        MAX_RPM=9,
+        OUTPUT_PATH="out/test",
+        OUTPUT_FORMAT=OutputFormat.JSON,
+        DO_EXTRACTION=False,
+        DO_LLM_SUMMARY=False,
+        SAVE_METADATA=False,
+        DRY_RUN=True,
+        SKIP_INTERACTIONS=True
     )
-    db: SqliteConnector = SqliteConnector("db/Chinook.db")
+    ProfilingConfig.init(test_profiling_config)
+
+    db: SqliteConnector = SqliteConnector(db_conn_string)
     yield db
 
     print("Cleaning up...")

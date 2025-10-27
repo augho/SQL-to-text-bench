@@ -6,10 +6,11 @@ from src.lib.utils import (
     run_rate_limited_tasks,
     human_in_the_loop,
     sqlite_export,
+    create_dir_if_not_exists
 )
-from src.profiling.GeminiApi import Gemini, ModelOutput, TableDescriptionOutput, TableDescription
-from src.lib.string_utils import table_desc_creation_str, field_desc_creation_str
-from src.lib.CliConfig import CliConfig, OutputFormat
+from src.profiling.GeminiApi import Gemini, ModelOutput, TableDescriptionOutput, TableDescription, field_desc_creation_str, table_desc_creation_str
+from src.lib.Config import OutputFormat
+from src.profiling.ProfilingConfig import ProfilingConfig
 from src.profiling.MetadataModel import (
     DatabaseMetadata,
     LengthMetaData,
@@ -82,7 +83,7 @@ def read_metadata_backup_folder(foldername: str) -> DatabaseMetadata | None:
 
         if len(tables) == 0:
             raise FileNotFoundError(
-                "No metadata found in folder", CliConfig.get().output_path
+                "No metadata found in folder", ProfilingConfig.OUTPUT_PATH
             )
 
         return DatabaseMetadata(name=foldername, tables=tables)
@@ -91,7 +92,7 @@ def read_metadata_backup_folder(foldername: str) -> DatabaseMetadata | None:
         return None
 
 def run_metadata_extraction() -> DatabaseMetadata:
-    db = SqliteConnector(CliConfig.get().filename)
+    db = SqliteConnector(ProfilingConfig.DB_CONN_STRING)
     db_metadata = {}
     tables: list[TableMetadata] = []
     for tablename in db.list_tables():
@@ -99,7 +100,7 @@ def run_metadata_extraction() -> DatabaseMetadata:
         db_metadata[tablename] = result
         tables.append(result)
 
-    return DatabaseMetadata(name=CliConfig.get().filename, tables=tables)
+    return DatabaseMetadata(name=ProfilingConfig.DB_CONN_STRING, tables=tables)
 
 
 # TODO fix this fn
@@ -112,6 +113,7 @@ def fix_generated_output(
         assert truth is not None
 
         if not model_output.success:
+            log(f"Model error: {model_output.error}")
             # add empty field desc when error so that its not empty
             model_output.data = TableDescription.from_metadata(truth)
         else:
@@ -137,8 +139,8 @@ def run_metadata_llm_summary(
 ) -> None:
     # TODO add a custom folder
     # If no extraction we read the output folder for backed up file
-    if not CliConfig.get().do_extraction:
-        db_metadata = read_metadata_backup_folder(CliConfig.get().output_path)
+    if not ProfilingConfig.DO_EXTRACTION:
+        db_metadata = read_metadata_backup_folder(ProfilingConfig.OUTPUT_PATH)
 
     if db_metadata is None:
         log("Aborting llm summary")
@@ -147,20 +149,21 @@ def run_metadata_llm_summary(
     gemini = Gemini()
     generations_output: dict[str, ModelOutput] = {}
 
-    run_args = [(table, generations_output) for table in db_metadata.tables]
+    # TODO Remove the filter
+    run_args = [(table, generations_output) for table in db_metadata.tables if table.name == "Artist"]
 
-    log("\n======= RUN DETAILS =======")
+    log("\n======= LLM RUN DETAILS =======")
     log(f"llm_model: {gemini.model_name}")
     log(f"# of input tables: {len(run_args)}")
     log(f"table_list: {[x[0].name for x in run_args]}")
-    log(f"output_path: {CliConfig.get().output_path}/{report_filename}.llm.json")
-    log(f"Max RPM: {CliConfig.get().max_rpm}")
-    log("========            =======\n")
+    log(f"output_path: {ProfilingConfig.OUTPUT_PATH}/{report_filename}.llm.json")
+    log(f"Max RPM: {ProfilingConfig.MAX_RPM}")
+    log("========                 =======\n")
 
     # If no logging set we don't ask for confirmation
     proceed_confirmation = (
         True
-        if CliConfig.get().skip_human_in_the_loop
+        if ProfilingConfig.SKIP_INTERACTIONS
         else human_in_the_loop("Do you wish to continue (y/n)?")
     )
 
@@ -179,9 +182,7 @@ def run_metadata_llm_summary(
 
     run_rate_limited_tasks(
         cb=generation_cb,
-        cb_args=run_args,
-        max_rpm=CliConfig.get().max_rpm,
-        do_logging=CliConfig.get().do_logging,
+        cb_args=run_args
     )
 
     
@@ -190,10 +191,11 @@ def run_metadata_llm_summary(
 
     # generations_output = json_import("out/profiles/Chinook/ty_gemini.llm.json")
 
-    export_success = export_tool(
+    create_dir_if_not_exists(ProfilingConfig.OUTPUT_PATH)
+    export_success = export_model_outputs(
         generations_output,
-        f"{CliConfig.get().output_path}/{report_filename}.llm",
-        CliConfig.get().output_format,
+        f"{ProfilingConfig.OUTPUT_PATH}/{report_filename}.llm",
+        ProfilingConfig.OUTPUT_FORMAT,
     )
 
     
@@ -206,11 +208,11 @@ def run_metadata_llm_summary(
         else:
             error_count += 1
 
-    log("\n======= RUN RESULT =======")
+    log("\n======= LLM RUN RESULT =======")
     log(f"# success: {success_count}")
     log(f"# errors: {error_count}")
     log(
-        f"\n[LOG] Summary generated at {CliConfig.get().output_path}/{report_filename}.llm.json\n"
+        f"\n[LOG] Summary generated at {ProfilingConfig.OUTPUT_PATH}/{report_filename}.llm.json\n"
     )
 
     if not export_success:
@@ -218,7 +220,7 @@ def run_metadata_llm_summary(
         log(str({k: v.model_dump() for k, v in generations_output.items()}))
 
 
-def export_tool(
+def export_model_outputs(
     model_outputs: dict[str, TableDescriptionOutput], filepath: str, format: OutputFormat
 ) -> bool:
     match format:
@@ -263,40 +265,55 @@ def export_tool(
 
 
 def run():
-    CliConfig.init()
+    _profiling_config = ProfilingConfig.create_from_parser()
+    ProfilingConfig.init(_profiling_config)
 
-    print(CliConfig.get())
-    print()
+    log("============ Profiling config ================")
+    log(str(_profiling_config.model_dump()))
+    log("==============================================\n")
 
     extracted_metadata = None
-    if CliConfig.get().dry_run:
-        log(
-            f"[DRY] run_metadata_extraction: reading metadata from {CliConfig.get().filename}"
-        )
-        if CliConfig.get().save_metadata:
-            log(f"[DRY] saving extracted metadata to {CliConfig.get().output_path} as json files")
-    elif CliConfig.get().do_extraction:
-        extracted_metadata = run_metadata_extraction()
-        if CliConfig.get().save_metadata:
+    # ---------------------------------
+    # Read metadata by querying database and save the metadata to output_path if requested
+    if ProfilingConfig.DO_EXTRACTION:
+        if ProfilingConfig.DRY_RUN:
+            print(
+                f"[DRY] run_metadata_extraction: reading metadata from {ProfilingConfig.DB_CONN_STRING}"
+            )
+        else:
+            extracted_metadata = run_metadata_extraction()
+
+        if ProfilingConfig.SAVE_METADATA:
+            if ProfilingConfig.DRY_RUN:
+                print(
+                    f"[DRY] saving extracted metadata to {ProfilingConfig.OUTPUT_PATH} as json files"
+                )
+
+            assert extracted_metadata is not None
+            create_dir_if_not_exists(ProfilingConfig.OUTPUT_PATH)
             for table_metadata in extracted_metadata.tables:
-                write_json(f"{CliConfig.get().output_path}/{table_metadata.name}.json", table_metadata.model_dump())
+                write_json(f"{ProfilingConfig.OUTPUT_PATH}/{table_metadata.name}.json", table_metadata.model_dump())
+        
     else:
         log("[LOG] Skipped metadata extraction")
 
-    if CliConfig.get().dry_run:
-        if extracted_metadata is None:
-            log(
-                f"[DRY] run_metadata_llm_summary: summarizing metadata saved @ {CliConfig.get().output_path}"
-            )
-        else:
-            log(
-                f"[DRY] run_metadata_llm_summary: summarizing metadata from {len(extracted_metadata.tables)} tables"
-            )
+    # ---------------------------------
+    # Summarizing metadata with an llm, if no metadata was extracted at the previous step it will try to read metadata backup at output_path
+    if ProfilingConfig.DO_LLM_SUMMARY:
+        if ProfilingConfig.DRY_RUN:
+            if extracted_metadata is None:
+                print(
+                    f"[DRY] run_metadata_llm_summary: summarizing metadata saved @ {ProfilingConfig.OUTPUT_PATH}"
+                )
+            else:
+                print(
+                    f"[DRY] run_metadata_llm_summary: summarizing metadata from {len(extracted_metadata.tables)} tables"
+                )
 
-    elif CliConfig.get().do_llm_summary:
         run_metadata_llm_summary(
             db_metadata=extracted_metadata, report_filename="ty_gemini"
         )
+
     else:
         log("[LOG] Skipped llm summary")
 
