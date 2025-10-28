@@ -1,21 +1,25 @@
+import queue
+
 from src.lib.SqliteConnector import SqliteConnector
 from src.lib.utils import (
     log,
     write_json,
     read_dir_files,
-    run_rate_limited_tasks,
     human_in_the_loop,
     sqlite_export,
-    create_dir_if_not_exists
+    create_dir_if_not_exists,
+    run_rate_limited_tasks_with_retry
 )
-from src.profiling.GeminiApi import Gemini, ModelOutput, TableDescriptionOutput, TableDescription, field_desc_creation_str, table_desc_creation_str
+from src.profiling.GenAi import TableDescriptionOutput, TableDescription, field_desc_creation_str, table_desc_creation_str, GenAiApi, AiApiError
+from src.profiling.GeminiApi import Gemini
 from src.lib.Config import OutputFormat
 from src.profiling.ProfilingConfig import ProfilingConfig
-from src.profiling.MetadataModel import (
+from src.profiling.Models import (
     DatabaseMetadata,
     LengthMetaData,
     TableMetadata,
     ColumnMetadata,
+    ModelOutput
 )
 
 
@@ -135,7 +139,7 @@ def fix_generated_output(
 
 
 def run_metadata_llm_summary(
-    db_metadata: DatabaseMetadata | None, report_filename: str
+    db_metadata: DatabaseMetadata | None, report_filename: str, llm: GenAiApi
 ) -> None:
     # TODO add a custom folder
     # If no extraction we read the output folder for backed up file
@@ -146,14 +150,13 @@ def run_metadata_llm_summary(
         log("Aborting llm summary")
         return
 
-    gemini = Gemini()
     generations_output: dict[str, ModelOutput] = {}
 
     # TODO Remove the filter
     run_args = [(table, generations_output) for table in db_metadata.tables if table.name == "Artist"]
 
     log("\n======= LLM RUN DETAILS =======")
-    log(f"llm_model: {gemini.model_name}")
+    log(f"llm_model: {llm.get_model_name()}")
     log(f"# of input tables: {len(run_args)}")
     log(f"table_list: {[x[0].name for x in run_args]}")
     log(f"output_path: {ProfilingConfig.OUTPUT_PATH}/{report_filename}.llm.json")
@@ -174,16 +177,29 @@ def run_metadata_llm_summary(
     # TODO add a way to read from a saved output instead
     # ---------------------------------
     # Rate limited api calls
+    error_queue = queue.Queue()
     def generation_cb(
         table_metadata: TableMetadata, output_dict: dict[str, ModelOutput]
     ):
-        result = gemini.summarize_table_metadata(table_metadata)
+        result, api_error = llm.summarize_table_metadata(table_metadata)
+        if api_error is not None:
+            error_queue.put((api_error, (table_metadata, output_dict)))
+
+        # We still add the result which is an empty table but it will be overwritten if we retry   
         output_dict[table_metadata.name] = result
 
-    run_rate_limited_tasks(
+    # run_rate_limited_tasks(
+    #     cb=generation_cb,
+    #     cb_args=run_args
+    # )
+    run_rate_limited_tasks_with_retry(
         cb=generation_cb,
-        cb_args=run_args
+        cb_args=run_args,
+        error_queue=error_queue,
+        retry_limit=3,
+        error_cb=llm.retry_strategy
     )
+
 
     
     # Ensures model didn't hallucinate table or field name 
@@ -264,7 +280,7 @@ def export_model_outputs(
             raise ValueError(f"Output format unsupported: {format}")
 
 
-def run():
+def run(llm: GenAiApi):
     _profiling_config = ProfilingConfig.create_from_parser()
     ProfilingConfig.init(_profiling_config)
 
@@ -311,7 +327,7 @@ def run():
                 )
 
         run_metadata_llm_summary(
-            db_metadata=extracted_metadata, report_filename="ty_gemini"
+            db_metadata=extracted_metadata, report_filename="ty_gemini", llm=llm
         )
 
     else:
@@ -323,4 +339,5 @@ def test():
 
 
 if __name__ == "__main__":
-    run()
+    llm = Gemini()
+    run(llm)

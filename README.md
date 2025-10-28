@@ -15,3 +15,6 @@ The first one has very descriptive queries with a wording that matches the table
     "sql": "Matching sql query"
 }
 ```
+
+# TODO
+- Create a correct README

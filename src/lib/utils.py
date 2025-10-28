@@ -4,11 +4,18 @@ import os
 import threading
 import time
 from typing import Callable
+import queue
+import random
 
 import matplotlib.pyplot as plt
 
 from src.lib.SqliteConnector import SqliteConnector
 from src.lib.Config import Config
+from src.lib.Errors import AiApiError
+
+
+def chaos_monkey(failure_rate: float) -> bool:
+    return random.random() < failure_rate
 
 def log(msg: str) -> None:
     if Config.DO_LOGGING:
@@ -186,9 +193,7 @@ def read_dir_files(path: str) -> list[str]:
     return os.listdir(path)
 
 
-def run_rate_limited_tasks(
-    cb: Callable, cb_args: list[tuple]
-):
+def run_rate_limited_tasks(cb: Callable, cb_args: list[tuple]):
     max_rpm = Config.MAX_RPM
     threads: list[threading.Thread] = []
 
@@ -203,13 +208,50 @@ def run_rate_limited_tasks(
         thread_delay_seconds: float = (60 + 1) / max_rpm
 
     for i, t in enumerate(threads):
-        log(f"Starting task {i + 1}/{len(threads)}")
+        log(f"Starting task [{i + 1}/{len(threads)}]")
         t.start()
 
         if thread_delay_seconds > 0:
             time.sleep(thread_delay_seconds)
 
     [t.join() for t in threads]
+
+
+def run_rate_limited_tasks_with_retry(
+    cb: Callable,
+    cb_args: list[tuple],
+    error_cb: Callable[[int, int], bool] | None,
+    error_queue: queue.Queue[tuple[AiApiError, tuple]],
+    retry_limit: int,
+):
+    # If no error cb is specified we only rely on the retry_limit
+    if error_cb is None:
+        error_cb = lambda x, y: True  # noqa: E731
+
+    error_log: dict[int, int] = {}
+    retry_args = cb_args
+    loop_count: int = 0
+    while len(retry_args) > 0:
+        if loop_count > 0:
+            log(
+                f"Retry attempt {loop_count} for failed tasks ({len(retry_args)} failed)"
+            )
+        loop_count += 1
+        run_rate_limited_tasks(cb=cb, cb_args=retry_args)
+
+        # We empty the previous args
+        retry_args = []
+        while not error_queue.empty():
+            (api_error, args) = error_queue.get()
+            log(str(api_error.code))
+            log(api_error.message)
+            # Log the error for error_cb strategy
+            error_log.setdefault(api_error.code, 0)
+            error_log[api_error.code] += 1
+            error_count = error_log[api_error.code]
+
+            if error_count < retry_limit and error_cb(api_error.code, error_count):
+                retry_args.append(args)
 
 
 if __name__ == "__main__":
